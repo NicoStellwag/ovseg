@@ -203,9 +203,9 @@ class ScannetPreprocessing(BasePreprocessing):
             # gt_data = (points[:, -2] + 1) * 1000 + points[:, -1] + 1
             gt_data = points[:, -2] * 1000 + points[:, -1] + 1
         else:
-            segments_test = "../../data/raw/scannet_test_segments"
+            segments_test = "./data/raw/scannet_test_segments"
             segment_indexes_filepath = filepath.name.replace(
-                ".ply", ".0.010000.segs.json"
+                ".ply", ".0.005000.segs.json"
             )
             segments = self._read_json(
                 f"{segments_test}/{segment_indexes_filepath}"

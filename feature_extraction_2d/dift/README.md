@@ -1,5 +1,6 @@
 # Diffusion Features (DIFT)
-dift feature extactor, works with cuda 11.3 installed and pytorch for cuda 11.7
+dift feature extactor, works with cuda 11.3 installed and pytorch for cuda 11.7.
+
 
 ### [Project Page](https://diffusionfeatures.github.io/) | [Paper](https://arxiv.org/abs/2306.03881) | [Colab Demo](https://colab.research.google.com/drive/1tUTJ3UJxbqnfvUMvYH5lxcqt0UdUjdq6?usp=sharing)
 
@@ -11,6 +12,9 @@ conda activate dift
 ```
 
 ## Extract DIFT for a given image
+package versions do not match with Mask3D and seem difficult to resolve. For now, extract features from DIFT first and save them to be used with Mask3D.
+
+
 You could use the following [command](extract_dift.sh) to extract DIFT from a given image, and save it as a torch tensor. These arguments are set to the same as in the semantic correspondence tasks by default.
 ```
 python extract_dift.py \
@@ -30,3 +34,5 @@ Here're the explanation for each argument:
 - `up_ft_index`: the index of the U-Net upsampling block to extract the feature map, choose from [0, 1, 2, 3]. `up_ft_index=1` by default for semantic correspondence.
 - `prompt`: the prompt used in the diffusion model.
 - `ensemble_size`: the number of repeated images in each batch used to get features. `ensemble_size=8` by default. You can reduce this value if encountering memory issue.
+
+

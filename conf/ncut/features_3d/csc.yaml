@@ -1,0 +1,2 @@
+defaults:
+  - model: Res16UNet34C

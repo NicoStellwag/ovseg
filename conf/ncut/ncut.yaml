@@ -1,2 +1,2 @@
 defaults:
-  - features_3d: csc
+  - feature_extraction_3d: csc

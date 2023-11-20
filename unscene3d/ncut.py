@@ -436,7 +436,7 @@ def encode_scene_feats(
 
                     return scene_key_feats
 
-        else:
+        else: # todo implement this for csc feature extraction
             # Feed forward on pretrained model
             _, feature_maps = model(sinput)
             encoded_feats = feature_maps[f"res_{config.freemask.resolution_scale}"]

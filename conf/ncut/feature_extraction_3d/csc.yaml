@@ -1,2 +1,3 @@
-defaults:
-  - model: Res16UNet34C
+# @package _group_
+save_dir: /mnt/hdd/ncut_features/3d/csc
+model: ???

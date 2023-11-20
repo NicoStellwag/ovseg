@@ -1,2 +1,2 @@
-defaults:
-  - feature_extraction_3d: csc
+# @package _group_
+some_property: some value

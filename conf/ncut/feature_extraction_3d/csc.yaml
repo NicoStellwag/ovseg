@@ -1,3 +1,6 @@
 # @package _group_
 save_dir: /mnt/hdd/ncut_features/3d/csc
 model: ???
+data:
+  dataset_dir: /mnt/hdd/scannet
+  mesh_filename_pattern: "*_vh_clean_2.ply"

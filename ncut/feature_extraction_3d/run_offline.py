@@ -31,7 +31,7 @@ def load_data(cfg_data):
         scene_mesh = o3d.io.read_triangle_mesh(mesh_file)
         coords = np.array(scene_mesh.vertices)
         coords = np.hstack(
-            [coords, np.ones(coords.shape[0])[:, None]]
+            [coords, np.zeros(coords.shape[0])[:, None]]
         )  # ME.SparseTensor adds the batch dim as last dim in coords when loaded through dataloader
         colors = np.array(scene_mesh.vertex_colors)
         yield F.to_tensor(colors)[0].type(torch.float), F.to_tensor(coords)[0].type(

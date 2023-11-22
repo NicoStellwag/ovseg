@@ -4,3 +4,4 @@ model: ???
 data:
   dataset_dir: /mnt/hdd/scannet
   mesh_filename_pattern: "*_vh_clean_2.ply"
+  voxel_size: 0.02 # 2cm

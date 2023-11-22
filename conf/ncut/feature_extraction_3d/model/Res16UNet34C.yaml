@@ -3,7 +3,7 @@ pretrained_weights: /mnt/hdd/CSC_Weights/train/Res16UNet34C.pth
 _target_: models.res16unet.Res16UNet34C
 in_channels: ${data.in_channels}
 out_channels: 32 # csc output dim
-out_fpn: true
+# out_fpn: true
 config:
   dialations: [ 1, 1, 1, 1 ]
   conv1_kernel_size: 3

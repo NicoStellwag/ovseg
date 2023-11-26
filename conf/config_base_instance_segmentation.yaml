@@ -75,7 +75,7 @@ defaults:
   - ncut: ncut
   - ncut/feature_extraction_3d: csc
   - ncut/feature_extraction_3d/model: Res16UNet34C # todo make Res...D work
-  - ncut/feature_extraction_2d: dino
+  - ncut/feature_extraction_2d: dinov2
 
 hydra:
   run:

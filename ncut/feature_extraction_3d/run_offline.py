@@ -119,19 +119,19 @@ def main(cfg: DictConfig):
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_3d, device)
 
-    for data in load_data(cfg.ncut.feature_extraction_3d.data, device):
+    for subscene in load_data(cfg.ncut.feature_extraction_3d.data, device):
         # model forward pass
-        x = data["sparse_tensor"]
+        x = subscene["sparse_tensor"]
         y_hat = model(x).detach()
 
         # associate to original coordinate system
-        original_coords = data["original_coords"]
+        original_coords = subscene["original_coords"]
         csc_feats = associate_features_to_original_coords(
             y_hat, cfg.ncut.feature_extraction_3d.data, original_coords
         )
 
         # save as np arrays
-        scan_name = data["scan_name"]
+        scan_name = subscene["scan_name"]
         scan_dir = os.path.join(cfg.ncut.feature_extraction_3d.save_dir, scan_name)
         os.makedirs(scan_dir, exist_ok=True)
         coords_file = os.path.join(scan_dir, "coords.npy")

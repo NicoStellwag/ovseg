@@ -140,7 +140,7 @@ def main(cfg: DictConfig):
         print("Saved: ", coords_file)
         np.save(feats_file, csc_feats)
         print("Saved: ", feats_file)
-        # visualize_feats(x.C[:, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
+        # visualize_feats(original_coords, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
         # visualize_feats(original_coords, csc_feats, save_path="./pred.html")
 
 

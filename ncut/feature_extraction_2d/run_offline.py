@@ -98,7 +98,7 @@ def main(cfg: DictConfig):
         subscene = subscene[0] # unwrap "batch"
         for img in subscene["images"][:1]:
             patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
-                img, 480
+                img, cfg.ncut.feature_extraction_2d.model.crop_size
             )
 
             feat_patches = []

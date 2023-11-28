@@ -2,7 +2,11 @@ import sys
 import hydra
 import torch
 import torch.nn as nn
+import numpy as np
+from sklearn.decomposition import PCA
+import clip
 from omegaconf import DictConfig
+from PIL import Image
 
 import f2dutil
 
@@ -33,32 +37,32 @@ def load_data(cfg_fe2d: DictConfig, only_first=False):
     return loader
 
 
-# def visualize_feats(coords, feats, save_path=None):
-#     """
-#     Visualize features.
-#     If the feature vector has more than 3 dims, PCA is applied to map it down to 3.
-#     When using ssh + vscode, specify a save path to a html file,
-#     go into the hydra save dir and start a web server with:
-#     python -m http.server 8000
-#     VSCode will forward the port automatically, so you can view it
-#     in your local browser.
-#     """
-#     # if necessary map features to 3 dims using pca to visualize them as colors
-#     if feats.shape[1] != 3:
-#         pca = PCA(n_components=3)
-#         feats_reduced = pca.fit_transform(feats)
-#         minv = feats_reduced.min(axis=0)
-#         maxv = feats_reduced.max(axis=0)
-#         colors = (feats_reduced - minv) / (maxv - minv)
-#     else:
-#         colors = feats
+def visualize_feats(feature_image, save_path, cpm=None):
+    """
+    Visualize and save torch tensor image (C, H, W).
+    If the C > 3, PCA is applied to map it down to 3.
+    """
+    # if necessary map features to 3 dims using pca to visualize them as colors
+    feature_image = feature_image.numpy()
+    channels, height, width = feature_image.shape
+    if channels > 3: 
+        reshaped = feature_image.reshape(channels, height * width).T
+        pca = PCA(n_components=3)
+        reshaped_reduced = pca.fit_transform(reshaped)
+        feats_reduced = reshaped_reduced.T.reshape(3, height, width)
+        minv = reshaped_reduced.min()
+        maxv = reshaped_reduced.max()
+        colors = (feats_reduced - minv) / (maxv - minv) * 255
+    else:
+        mi, ma = feature_image.min(), feature_image.max()
+        colors = (feature_image - mi) / (ma - mi) * 255
 
-#     if save_path:
-#         fig.write_html(save_path)
-#     else:
-#         fig.show()
-
-#     return fig
+    colors = colors.astype(np.uint8)
+    if channels == 1:
+        img = Image.fromarray(colors.squeeze(), "L")
+    else:
+        img = Image.fromarray(colors.transpose(1, 2, 0))
+    img.save(save_path)
 
 
 # def associate_features_to_original_coords(
@@ -87,12 +91,12 @@ def main(cfg: DictConfig):
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
 
-    # todo | think about memory management here, it won't even fit 2 sets of images
-    # todo | + features in ram
+    # todo | think about memory management here
+    # todo | a sens file is 3.5 gb (with compressed files i guess)
+    # todo | a feature tensor should be around 2.6 gb
     for subscene in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
         subscene = subscene[0] # unwrap "batch"
         for img in subscene["images"][:1]:
-            print("img", img.shape)
             patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
                 img, 480
             )
@@ -102,10 +106,12 @@ def main(cfg: DictConfig):
                 p = p.unsqueeze(0)
                 p = p.to(device)
 
-                feat_p = model(p)
-                feat_p = nn.functional.interpolate(
-                    feat_p, scale_factor=2, mode="nearest"
-                )  # model cuts size in half
+                with torch.no_grad():
+                    feat_p = model(p)
+                    feat_p = nn.functional.normalize(feat_p, dim=1) # unit clip vector per pixel
+                    feat_p = nn.functional.interpolate(
+                        feat_p, scale_factor=2, mode="nearest"
+                    )  # model cuts size in half
 
                 feat_p = feat_p.detach().cpu()
                 feat_p = feat_p.squeeze(0)
@@ -121,7 +127,22 @@ def main(cfg: DictConfig):
                 num_rows,
                 num_cols,
             )
-            print("feats", feats.shape)
+
+            # tmp: verify clip space by querying with text prompt
+            # textencoder = model.clip_pretrained.encode_text
+            # prompt = clip.tokenize("table")
+            # prompt = prompt.to(device)
+            # with torch.no_grad():
+            #     text_feat = textencoder(prompt)
+            #     text_feat = nn.functional.normalize(text_feat, dim=1)
+            # text_feat = text_feat.detach().cpu()
+            # cosd = nn.CosineSimilarity(dim=1)
+            # sim = cosd(feats, text_feat.unsqueeze(-1).unsqueeze(-1))
+            # print(sim.shape)
+            # visualize_feats(sim, "sim.png")
+
+            visualize_feats(img, "img.png")
+            visualize_feats(feats, "clip_feats.png")
 
 if __name__ == "__main__":
     main()

@@ -64,8 +64,8 @@ def visualize_feats(coords, feats, save_path=None):
     if feats.shape[1] != 3:
         pca = PCA(n_components=3)
         feats_reduced = pca.fit_transform(feats)
-        minv = feats_reduced.min(axis=0)
-        maxv = feats_reduced.max(axis=0)
+        minv = feats_reduced.min()
+        maxv = feats_reduced.max()
         colors = (feats_reduced - minv) / (maxv - minv)
     else:
         colors = feats

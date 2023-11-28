@@ -78,9 +78,7 @@ def split_to_patches(img, patch_size):
             w_to = (col + 1) * patch_size
             patches.append(padded_img[:, h_from:h_to, w_from:w_to])
 
-    print(patches[0].shape)
     tensor_patches = [torch.from_numpy(i) for i in patches]
-    print(tensor_patches[0].shape)
     return tensor_patches, pad_h, pad_w, num_rows, num_cols
 
 

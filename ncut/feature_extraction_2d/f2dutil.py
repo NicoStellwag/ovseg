@@ -9,17 +9,14 @@ import os
 from SensorData_python3_port import SensorData
 
 
-class SenseDS(Dataset):
+class SensDS(Dataset):
     """
     Dataset helper for easy parallel loading.
     """
 
-    def __init__(self, cfg_data):
+    def __init__(self, dataset_dir, sensordata_filename_pattern):
         self.sens_files = [
-            str(i)
-            for i in Path(cfg_data.dataset_dir).rglob(
-                cfg_data.sensordata_filename_pattern
-            )
+            str(i) for i in Path(dataset_dir).rglob(sensordata_filename_pattern)
         ]
 
     def __len__(self):

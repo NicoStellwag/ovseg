@@ -1,38 +1,37 @@
 import sys
 import hydra
-import os
 import torch
 import torch.nn as nn
-import torch
-from torch.utils.data import DataLoader
-from transformers import AutoImageProcessor, AutoModel
-from scipy.spatial import KDTree
-from sklearn.decomposition import PCA
-import numpy as np
 from omegaconf import DictConfig
 
 import f2dutil
-
-
-
 
 
 def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
     """
     Instantiates a minkowski resunet and loads pretrained weights.
     """
-    if cfg_fe2d.model.type == "huggingface_transformers":
-        processor = AutoImageProcessor.from_pretrained(cfg_fe2d.model.processor_name)
-        model = AutoModel.from_pretrained(cfg_fe2d.model.model_name)
-    return processor, model.eval().to(device)
+    model = hydra.utils.instantiate(cfg_fe2d.model, _convert_="all")
+    if cfg_fe2d.model.get("weights_path", None):
+        if cfg_fe2d.model.weights_type == "state_dict":
+            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path))
+        elif cfg_fe2d.model.weights_type == "checkpoint":
+            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path)["state_dict"])
+    return model.eval().to(device)
 
 
-def load_data(cfg_data: DictConfig, only_first=False):
-    ds = f2dutil.SenseDS(cfg_data)
-    loader = DataLoader(ds, batch_size=1, collate_fn=lambda x: x)#, num_workers=8, persistent_workers=True)
+def load_data(cfg_fe2d: DictConfig, only_first=False):
+    ds = hydra.utils.instantiate(cfg_fe2d.data.dataset)
+    if (
+        cfg_fe2d.data.name == "imagedata"
+    ):  # a bit hacky but i don't see a nice solution
+        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds, collate_fn=lambda x: x)
+    else:
+        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds)
     if only_first:
-        return next(iter(loader))
+        return [next(iter(loader))]
     return loader
+
 
 # def visualize_feats(coords, feats, save_path=None):
 #     """
@@ -82,43 +81,47 @@ def load_data(cfg_data: DictConfig, only_first=False):
     config_path="../../conf", config_name="config_base_instance_segmentation.yaml"
 )
 def main(cfg: DictConfig):
+    sys.path.append(hydra.utils.get_original_cwd())
+
     device = torch.device("cuda:0")
 
-    processor, model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
+    model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
 
-    for subscene in load_data(cfg.ncut.feature_extraction_2d.data, only_first=True):
-        # model forward pass
+    # todo | think about memory management here, it won't even fit 2 sets of images
+    # todo | + features in ram
+    for subscene in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
+        subscene = subscene[0] # unwrap "batch"
         for img in subscene["images"][:1]:
-            print(img.shape)
+            print("img", img.shape)
+            patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
+                img, 480
+            )
 
-            patches, pad_height, pad_width = f2dutil.split_to_patches(img, 224)
-            print(patches.shape)
+            feat_patches = []
+            for p in patches:
+                p = p.unsqueeze(0)
+                p = p.to(device)
 
-            recon = f2dutil.reconstruct_from_patches(patches, img.shape, pad_height, pad_width)
-            print(recon.shape)
+                feat_p = model(p)
+                feat_p = nn.functional.interpolate(
+                    feat_p, scale_factor=2, mode="nearest"
+                )  # model cuts size in half
 
-            # inputs = processor(images=img, return_tensors="pt")
-            # inputs = inputs.to(device)
-            # outputs = model(**inputs)
-            # feats = outputs[0].detach().cpu().numpy() # last hidden states
-            # print(img.shape)
-            # print(feats.shape)
-        # print(y_hat.shape)
+                feat_p = feat_p.detach().cpu()
+                feat_p = feat_p.squeeze(0)
 
+                feat_patches.append(feat_p)
 
-        # # save as np arrays
-        # scan_name = data["scan_name"]
-        # scan_dir = os.path.join(cfg.ncut.feature_extraction_3d.save_dir, scan_name)
-        # os.makedirs(scan_dir, exist_ok=True)
-        # coords_file = os.path.join(scan_dir, "coords.npy")
-        # feats_file = os.path.join(scan_dir, "csc_feats.npy")
-        # np.save(coords_file, original_coords)
-        # print("Saved: ", coords_file)
-        # np.save(feats_file, csc_feats)
-        # print("Saved: ", feats_file)
-        # # visualize_feats(x.C[:, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
-        # # visualize_feats(original_coords, csc_feats, save_path="./pred.html")
-
+            feats = f2dutil.reconstruct_from_patches(
+                feat_patches,
+                img.shape[1],
+                img.shape[2],
+                pad_h,
+                pad_w,
+                num_rows,
+                num_cols,
+            )
+            print("feats", feats.shape)
 
 if __name__ == "__main__":
     main()

@@ -12,10 +12,7 @@ import numpy as np
 import MinkowskiEngine as ME
 from omegaconf import DictConfig
 
-import getpass
-#print(getpass.getuser())
-os.chdir("/home/luebberstedt/ovseg")
-#print(os.getcwd())
+
 def get_feature_extractor(cfg_fe3d: DictConfig, device) -> nn.Module:
     """
     Instantiates a minkowski resunet and loads pretrained weights.
@@ -25,7 +22,7 @@ def get_feature_extractor(cfg_fe3d: DictConfig, device) -> nn.Module:
     return model.eval().to(device)
 
 
-def load_data(cfg_data: DictConfig, device, only_first=True):
+def load_data(cfg_data: DictConfig, device, only_first=False):
     mesh_files = [
         str(i) for i in Path(cfg_data.dataset_dir).rglob(cfg_data.mesh_filename_pattern)
     ]
@@ -67,8 +64,8 @@ def visualize_feats(coords, feats, save_path=None):
     if feats.shape[1] != 3:
         pca = PCA(n_components=3)
         feats_reduced = pca.fit_transform(feats)
-        minv = feats_reduced.min(axis=0)
-        maxv = feats_reduced.max(axis=0)
+        minv = feats_reduced.min()
+        maxv = feats_reduced.max()
         colors = (feats_reduced - minv) / (maxv - minv)
     else:
         colors = feats
@@ -143,8 +140,8 @@ def main(cfg: DictConfig):
         print("Saved: ", coords_file)
         np.save(feats_file, csc_feats)
         print("Saved: ", feats_file)
-        visualize_feats(x.C[:, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
-        visualize_feats(original_coords, csc_feats, save_path="./pred.html")
+        # visualize_feats(original_coords, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
+        # visualize_feats(original_coords, csc_feats, save_path="./pred.html")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,26 @@
 # @package _group_
+# based on minimal lseg implementation for easier clip extraction
+# https://github.com/krrish94/lseg-minimal
+# (follow installation instructions described there)
 save_dir: /mnt/hdd/ncut_features/2d/lseg
-model: ???
+model:
+  weights_path: /mnt/hdd/lseg_weights/lseg_minimal_e200.ckpt
+  weights_type: state_dict # alternative: checkpoint
+  _target_: lseg.lseg_net.LSegNet
+  backbone: clip_vitl16_384
+  features: 256
+  crop_size: 480
+  arch_option: 0
+  block_depth: 0
+  activation: lrelu
+data:
+  name: imagedata
+  dataset:
+    _target_: ncut.feature_extraction_2d.f2dutil.SensDS
+    dataset_dir: /mnt/hdd/scannet
+    sensordata_filename_pattern: "*.sens"
+  dataloader: # overwrite dataset with ds and collate_fn with the identity function to use this
+    _target_: torch.utils.data.DataLoader
+    batch_size: 1
+    # num_workers: 2
+    # persistent_workers: True

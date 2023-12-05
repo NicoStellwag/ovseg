@@ -1,65 +1,68 @@
 import sys
 import hydra
-import os
 import torch
 import torch.nn as nn
-import torch
-from torch.utils.data import DataLoader
-from transformers import AutoImageProcessor, AutoModel
-from scipy.spatial import KDTree
-from sklearn.decomposition import PCA
 import numpy as np
+from sklearn.decomposition import PCA
+import clip
 from omegaconf import DictConfig
+from PIL import Image
 
 import f2dutil
-
-
-
 
 
 def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
     """
     Instantiates a minkowski resunet and loads pretrained weights.
     """
-    if cfg_fe2d.model.type == "huggingface_transformers":
-        processor = AutoImageProcessor.from_pretrained(cfg_fe2d.model.processor_name)
-        model = AutoModel.from_pretrained(cfg_fe2d.model.model_name)
-    return processor, model.eval().to(device)
+    model = hydra.utils.instantiate(cfg_fe2d.model, _convert_="all")
+    if cfg_fe2d.model.get("weights_path", None):
+        if cfg_fe2d.model.weights_type == "state_dict":
+            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path))
+        elif cfg_fe2d.model.weights_type == "checkpoint":
+            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path)["state_dict"])
+    return model.eval().to(device)
 
 
-def load_data(cfg_data: DictConfig, only_first=False):
-    ds = f2dutil.SenseDS(cfg_data)
-    loader = DataLoader(ds, batch_size=1, collate_fn=lambda x: x)#, num_workers=8, persistent_workers=True)
+def load_data(cfg_fe2d: DictConfig, only_first=False):
+    ds = hydra.utils.instantiate(cfg_fe2d.data.dataset)
+    if (
+        cfg_fe2d.data.name == "imagedata"
+    ):  # a bit hacky but i don't see a nice solution
+        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds, collate_fn=lambda x: x)
+    else:
+        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds)
     if only_first:
-        return next(iter(loader))
+        return [next(iter(loader))]
     return loader
 
-# def visualize_feats(coords, feats, save_path=None):
-#     """
-#     Visualize features.
-#     If the feature vector has more than 3 dims, PCA is applied to map it down to 3.
-#     When using ssh + vscode, specify a save path to a html file,
-#     go into the hydra save dir and start a web server with:
-#     python -m http.server 8000
-#     VSCode will forward the port automatically, so you can view it
-#     in your local browser.
-#     """
-#     # if necessary map features to 3 dims using pca to visualize them as colors
-#     if feats.shape[1] != 3:
-#         pca = PCA(n_components=3)
-#         feats_reduced = pca.fit_transform(feats)
-#         minv = feats_reduced.min(axis=0)
-#         maxv = feats_reduced.max(axis=0)
-#         colors = (feats_reduced - minv) / (maxv - minv)
-#     else:
-#         colors = feats
 
-#     if save_path:
-#         fig.write_html(save_path)
-#     else:
-#         fig.show()
+def visualize_feats(feature_image, save_path, cpm=None):
+    """
+    Visualize and save torch tensor image (C, H, W).
+    If the C > 3, PCA is applied to map it down to 3.
+    """
+    # if necessary map features to 3 dims using pca to visualize them as colors
+    feature_image = feature_image.numpy()
+    channels, height, width = feature_image.shape
+    if channels > 3: 
+        reshaped = feature_image.reshape(channels, height * width).T
+        pca = PCA(n_components=3)
+        reshaped_reduced = pca.fit_transform(reshaped)
+        feats_reduced = reshaped_reduced.T.reshape(3, height, width)
+        minv = reshaped_reduced.min()
+        maxv = reshaped_reduced.max()
+        colors = (feats_reduced - minv) / (maxv - minv) * 255
+    else:
+        mi, ma = feature_image.min(), feature_image.max()
+        colors = (feature_image - mi) / (ma - mi) * 255
 
-#     return fig
+    colors = colors.astype(np.uint8)
+    if channels == 1:
+        img = Image.fromarray(colors.squeeze(), "L")
+    else:
+        img = Image.fromarray(colors.transpose(1, 2, 0))
+    img.save(save_path)
 
 
 # def associate_features_to_original_coords(
@@ -82,43 +85,64 @@ def load_data(cfg_data: DictConfig, only_first=False):
     config_path="../../conf", config_name="config_base_instance_segmentation.yaml"
 )
 def main(cfg: DictConfig):
+    sys.path.append(hydra.utils.get_original_cwd())
+
     device = torch.device("cuda:0")
 
-    processor, model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
+    model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
 
-    for subscene in load_data(cfg.ncut.feature_extraction_2d.data, only_first=True):
-        # model forward pass
+    # todo | think about memory management here
+    # todo | a sens file is 3.5 gb (with compressed files i guess)
+    # todo | a feature tensor should be around 2.6 gb
+    for subscene in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
+        subscene = subscene[0] # unwrap "batch"
         for img in subscene["images"][:1]:
-            print(img.shape)
+            patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
+                img, cfg.ncut.feature_extraction_2d.model.crop_size
+            )
 
-            patches, pad_height, pad_width = f2dutil.split_to_patches(img, 224)
-            print(patches.shape)
+            feat_patches = []
+            for p in patches:
+                p = p.unsqueeze(0)
+                p = p.to(device)
 
-            recon = f2dutil.reconstruct_from_patches(patches, img.shape, pad_height, pad_width)
-            print(recon.shape)
+                with torch.no_grad():
+                    feat_p = model(p)
+                    feat_p = nn.functional.normalize(feat_p, dim=1) # unit clip vector per pixel
+                    feat_p = nn.functional.interpolate(
+                        feat_p, scale_factor=2, mode="nearest"
+                    )  # model cuts size in half
 
-            # inputs = processor(images=img, return_tensors="pt")
-            # inputs = inputs.to(device)
-            # outputs = model(**inputs)
-            # feats = outputs[0].detach().cpu().numpy() # last hidden states
-            # print(img.shape)
-            # print(feats.shape)
-        # print(y_hat.shape)
+                feat_p = feat_p.detach().cpu()
+                feat_p = feat_p.squeeze(0)
 
+                feat_patches.append(feat_p)
 
-        # # save as np arrays
-        # scan_name = data["scan_name"]
-        # scan_dir = os.path.join(cfg.ncut.feature_extraction_3d.save_dir, scan_name)
-        # os.makedirs(scan_dir, exist_ok=True)
-        # coords_file = os.path.join(scan_dir, "coords.npy")
-        # feats_file = os.path.join(scan_dir, "csc_feats.npy")
-        # np.save(coords_file, original_coords)
-        # print("Saved: ", coords_file)
-        # np.save(feats_file, csc_feats)
-        # print("Saved: ", feats_file)
-        # # visualize_feats(x.C[:, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
-        # # visualize_feats(original_coords, csc_feats, save_path="./pred.html")
+            feats = f2dutil.reconstruct_from_patches(
+                feat_patches,
+                img.shape[1],
+                img.shape[2],
+                pad_h,
+                pad_w,
+                num_rows,
+                num_cols,
+            )
 
+            # tmp: verify clip space by querying with text prompt
+            # textencoder = model.clip_pretrained.encode_text
+            # prompt = clip.tokenize("table")
+            # prompt = prompt.to(device)
+            # with torch.no_grad():
+            #     text_feat = textencoder(prompt)
+            #     text_feat = nn.functional.normalize(text_feat, dim=1)
+            # text_feat = text_feat.detach().cpu()
+            # cosd = nn.CosineSimilarity(dim=1)
+            # sim = cosd(feats, text_feat.unsqueeze(-1).unsqueeze(-1))
+            # print(sim.shape)
+            # visualize_feats(sim, "sim.png")
+
+            visualize_feats(img, "img.png")
+            visualize_feats(feats, "clip_feats.png")
 
 if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import MinkowskiEngine as ME
 
-from SensorData_python3_port import SensorData
+from ncut.SensorData_python3_port import SensorData
 
 
 def color_images_from_sensor_data(sens: SensorData, image_size=None, frame_skip=1):
@@ -82,8 +82,9 @@ class NcutScannetDataset(Dataset):
         dataset_dir: base dir of scannet dataset
         sensordata_filename_pattern: glob pattern for sens file
         mesh_filename_pattern: glob pattern for mesh ply file
-        voxel_size: voxel size in cm
+        voxel_size: voxel size in meters
         content: dict entries of a sample
+            scene_name (always contained): scene name as string of format sceneXXXX_XX
             mesh_voxel_coords: np array of shape (n_points, 3) of coords normalized w.r.t. voxel size
             mesh_original_coords: np array of shape (n_points, 3) of coords in meters
             mesh_colors: np array of shape (n_points, 3) of RGB colors of points
@@ -104,8 +105,8 @@ class NcutScannetDataset(Dataset):
         return len(self.scans)
 
     def __getitem__(self, idx):
-        scan_name = os.path.basename(self.scans[idx])
-        sample = {"scan_name": scan_name}
+        scene_name = os.path.basename(self.scans[idx])
+        sample = {"scene_name": scene_name}
 
         # mesh stuff
         mesh_content = ["mesh_voxel_coords", "mesh_original_coords", "mesh_colors"]

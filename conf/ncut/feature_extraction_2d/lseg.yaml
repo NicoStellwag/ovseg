@@ -16,9 +16,14 @@ model:
 data:
   name: imagedata
   dataset:
-    _target_: ncut.feature_extraction_2d.f2dutil.SensDS
+    _target_: ncut.ncut_dataset.NcutScannetDataset
     dataset_dir: /mnt/hdd/scannet
-    sensordata_filename_pattern: "*.sens"
+    sensordata_glob_pattern: "*.sens"
+    mesh_glob_pattern: "*_vh_clean_2.ply"
+    voxel_size: 0.02
+    content:
+      - color_images
+
   dataloader: # overwrite dataset with ds and collate_fn with the identity function to use this
     _target_: torch.utils.data.DataLoader
     batch_size: 1

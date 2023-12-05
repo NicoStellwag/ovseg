@@ -2,6 +2,7 @@ import sys
 import hydra
 import torch
 import torch.nn as nn
+import torchvision.transforms.functional as F
 import numpy as np
 from sklearn.decomposition import PCA
 import clip
@@ -94,9 +95,11 @@ def main(cfg: DictConfig):
     # todo | think about memory management here
     # todo | a sens file is 3.5 gb (with compressed files i guess)
     # todo | a feature tensor should be around 2.6 gb
-    for subscene in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
-        subscene = subscene[0] # unwrap "batch"
-        for img in subscene["images"][:1]:
+    for sample in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
+        sample = sample[0] # unwrap "batch"
+        print(sample)
+        for img in list(sample["color_images"])[:1]: # ! tmp
+            img = F.to_tensor(img)
             patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
                 img, cfg.ncut.feature_extraction_2d.model.crop_size
             )

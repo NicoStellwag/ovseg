@@ -1,6 +1,12 @@
 import glob
 import os
+import sys
 import hydra
+from hydra.utils import get_original_cwd, to_absolute_path
+#os.chdir("/home/luebberstedt/ovseg")
+#sys.path.append(os.getcwd())
+#print(os.getcwd())
+#print(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
 import logging
 from omegaconf import OmegaConf
 from sklearn.decomposition import PCA
@@ -13,13 +19,14 @@ from scipy.linalg import eigh
 import torch.nn.functional as F
 import pyviz3d.visualizer as vis
 
+os.environ["HYDRA_FULL_ERROR"] = "1"
 from datasets import load_dataset
-from datasets.dataset import initialize_data_loader
+from ovseg.lib.dataset import initialize_data_loader
 from models import load_model
-from models.encoders_2d import load_2d_model
+#from models.encoders_2d import load_2d_model
 from utils.cuda_utils.raycast_image import Project2DFeaturesCUDA
-from utils.utils import load_state_with_same_shape
-from utils.freemask_utils import *
+from lib.utils import load_state_with_same_shape
+#from utils.freemask_utils import *
 
 from MinkowskiEngine import SparseTensor
 
@@ -40,7 +47,7 @@ def initialize_models(config, device):
 
     # Dataloader
     logging.info("===> Initializing dataloader")
-    DatasetClass = load_dataset(config.data.dataset)
+    DatasetClass = load_dataset(config.data.datasets)
     data_loader = initialize_data_loader(
         DatasetClass,
         config=config,
@@ -53,6 +60,7 @@ def initialize_models(config, device):
     )
     dataset = data_loader.dataset  # type: lib.datasets.scannet.ScanNet_2cmDataset
 
+    return None, data_loader, dataset
     if config.image_data.use_images:
         # 2D model initialization
         logging.info("===> Building 2D model")
@@ -750,8 +758,9 @@ def segment_scene(
     return bipartitions, aggregated_features
 
 
-@hydra.main(config_path="config", config_name="default.yaml")
+@hydra.main(config_path="../conf", config_name="config_base_instance_segmentation.yaml")
 def main(config):
+    print("ayay")
     device = "cuda"
     model, data_loader, dataset = initialize_models(config, device)
 

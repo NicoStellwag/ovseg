@@ -6,6 +6,8 @@ import open3d as o3d
 import numpy as np
 import torch
 import MinkowskiEngine as ME
+from omegaconf import DictConfig
+import hydra
 
 from ncut.SensorData_python3_port import SensorData
 
@@ -111,7 +113,7 @@ class NcutScannetDataset(Dataset):
         # mesh stuff
         mesh_content = ["mesh_voxel_coords", "mesh_original_coords", "mesh_colors"]
         if any(file in self.content for file in mesh_content):
-            mesh_path = next(iter(Path(self.scans[idx]).glob(self.mesh_glob_pattern)))
+            mesh_path = str(next(iter(Path(self.scans[idx]).glob(self.mesh_glob_pattern))))
             assert os.path.isfile(mesh_path), f"mesh file does not exist: {mesh_path}"
             mesh = o3d.io.read_triangle_mesh(mesh_path)
         if "mesh_voxel_coords" in self.content:
@@ -131,9 +133,9 @@ class NcutScannetDataset(Dataset):
             "color_instrinsics",
         ]
         if any(item in self.content for item in image_content):
-            sens_path = next(
+            sens_path = str(next(
                 iter(Path(self.scans[idx]).glob(self.sensordata_glob_pattern))
-            )
+            ))
             assert os.path.isfile(sens_path), f"sens file does not exist: {sens_path}"
             sensordata = SensorData(sens_path)
         if "color_images" in self.content:
@@ -158,5 +160,25 @@ class NcutScannetDataset(Dataset):
         """
         coords = torch.IntTensor(coords).to(device)
         features = torch.Tensor(features).to(device)
-        features, coords = ME.utils.sparse_collate(coords=[coords], feats=[features])
+        coords, features = ME.utils.sparse_collate(coords=[coords], feats=[features])
         return ME.SparseTensor(coordinates=coords, features=features)
+
+    @staticmethod
+    def dataloader_from_hydra(datacfg: DictConfig, only_first=False):
+        """
+        datacfg must be hydra config of the following form:
+        If only_first is True, the dataloader's first batch will be returned.
+
+        dataset:
+          <config to instantiate this class>
+        dataloader:
+          <config to instantiate dataloader with batch size 1 (else will be overwritten!)>
+        """
+        ds = hydra.utils.instantiate(datacfg.dataset)
+        loader = hydra.utils.instantiate(
+            datacfg.dataloader, dataset=ds, collate_fn=lambda x: x
+        )
+        assert loader.batch_size == 1, "batch size must be 1!"
+        if only_first:
+            return [next(iter(loader))]
+        return loader

@@ -1,5 +1,4 @@
 import sys
-from pathlib import Path
 import os
 import hydra
 import torch
@@ -20,34 +19,6 @@ def get_feature_extractor(cfg_fe3d: DictConfig, device) -> nn.Module:
     model = hydra.utils.instantiate(cfg_fe3d.model)
     model.load_state_dict(torch.load(cfg_fe3d.model.pretrained_weights)["state_dict"])
     return model.eval().to(device)
-
-
-def load_data(cfg_data: DictConfig, device, only_first=False):
-    mesh_files = [
-        str(i) for i in Path(cfg_data.dataset_dir).rglob(cfg_data.mesh_filename_pattern)
-    ]
-    if only_first:
-        mesh_files = mesh_files[:1]
-    for mesh_file in mesh_files:
-        # load ply file and convert to minkowski engine sparse tensor
-        scene_mesh = o3d.io.read_triangle_mesh(mesh_file)
-        coords = np.array(scene_mesh.vertices).astype(np.single)
-        original_coords = coords
-        coords = coords / cfg_data.voxel_size
-        colors = np.array(scene_mesh.vertex_colors).astype(np.single)
-        coords = torch.IntTensor(coords).to(device)
-        colors = torch.Tensor(colors).to(device)
-        coords, colors = ME.utils.sparse_collate(coords=[coords], feats=[colors])
-        x = ME.SparseTensor(coordinates=coords, features=colors)
-
-        # get save path
-        scan_name = os.path.basename(os.path.dirname(mesh_file))
-
-        yield {
-            "sparse_tensor": x,
-            "scan_name": scan_name,
-            "original_coords": original_coords,
-        }
 
 
 def visualize_feats(coords, feats, save_path=None):
@@ -101,7 +72,7 @@ def associate_features_to_original_coords(
     This function assigns the nearest neighbor's features to each of the original points.
     """
     low_res_coords = y_hat.C[:, 1:].cpu().numpy()  # slice off batch dim
-    high_res_coords = original_coords / cfg_data.voxel_size
+    high_res_coords = original_coords / cfg_data.dataset.voxel_size
     kdtree = KDTree(low_res_coords)
     _, nn_indices = kdtree.query(high_res_coords, k=1)
     high_res_feats = y_hat.F[nn_indices].cpu().numpy()
@@ -114,25 +85,33 @@ def associate_features_to_original_coords(
 def main(cfg: DictConfig):
     # necessary for hydra object instantiation when script is not in project root
     sys.path.append(hydra.utils.get_original_cwd())
+    from ncut.ncut_dataset import NcutScannetDataset
 
     device = torch.device("cuda:0")
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_3d, device)
+    loader = NcutScannetDataset.dataloader_from_hydra(
+        cfg.ncut.feature_extraction_3d.data
+    )
 
-    for subscene in load_data(cfg.ncut.feature_extraction_3d.data, device):
+    for sample in loader:
+        sample = sample[0]
+        vox_coords = sample["mesh_voxel_coords"]
+        colors = sample["mesh_colors"]
+        x = NcutScannetDataset.to_sparse_tens(vox_coords, colors, device)
+
         # model forward pass
-        x = subscene["sparse_tensor"]
         y_hat = model(x).detach()
 
         # associate to original coordinate system
-        original_coords = subscene["original_coords"]
+        original_coords = sample["mesh_original_coords"]
         csc_feats = associate_features_to_original_coords(
             y_hat, cfg.ncut.feature_extraction_3d.data, original_coords
         )
 
         # save as np arrays
-        scan_name = subscene["scan_name"]
-        scan_dir = os.path.join(cfg.ncut.feature_extraction_3d.save_dir, scan_name)
+        scene_name = sample["scene_name"]
+        scan_dir = os.path.join(cfg.ncut.feature_extraction_3d.save_dir, scene_name)
         os.makedirs(scan_dir, exist_ok=True)
         coords_file = os.path.join(scan_dir, "coords.npy")
         feats_file = os.path.join(scan_dir, "csc_feats.npy")
@@ -140,7 +119,10 @@ def main(cfg: DictConfig):
         print("Saved: ", coords_file)
         np.save(feats_file, csc_feats)
         print("Saved: ", feats_file)
-        # visualize_feats(original_coords, 1:].cpu().numpy(), x.F.cpu().numpy(), save_path="./in.html")
+
+        # in_coords = x.C.cpu().numpy()[:, 1:]
+        # visualize_feats(original_coords, colors, save_path="./colors.html")
+        # visualize_feats(in_coords, x.F.cpu().numpy(), save_path="./in.html")
         # visualize_feats(original_coords, csc_feats, save_path="./pred.html")
 
 

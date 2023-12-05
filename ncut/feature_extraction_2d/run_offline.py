@@ -25,19 +25,6 @@ def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
     return model.eval().to(device)
 
 
-def load_data(cfg_fe2d: DictConfig, only_first=False):
-    ds = hydra.utils.instantiate(cfg_fe2d.data.dataset)
-    if (
-        cfg_fe2d.data.name == "imagedata"
-    ):  # a bit hacky but i don't see a nice solution
-        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds, collate_fn=lambda x: x)
-    else:
-        loader = hydra.utils.instantiate(cfg_fe2d.data.dataloader, dataset=ds)
-    if only_first:
-        return [next(iter(loader))]
-    return loader
-
-
 def visualize_feats(feature_image, save_path, cpm=None):
     """
     Visualize and save torch tensor image (C, H, W).
@@ -46,7 +33,7 @@ def visualize_feats(feature_image, save_path, cpm=None):
     # if necessary map features to 3 dims using pca to visualize them as colors
     feature_image = feature_image.numpy()
     channels, height, width = feature_image.shape
-    if channels > 3: 
+    if channels > 3:
         reshaped = feature_image.reshape(channels, height * width).T
         pca = PCA(n_components=3)
         reshaped_reduced = pca.fit_transform(reshaped)
@@ -87,18 +74,19 @@ def visualize_feats(feature_image, save_path, cpm=None):
 )
 def main(cfg: DictConfig):
     sys.path.append(hydra.utils.get_original_cwd())
+    from ncut.ncut_dataset import NcutScannetDataset
 
     device = torch.device("cuda:0")
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
+    loader = NcutScannetDataset.dataloader_from_hydra(cfg.ncut.feature_extraction_2d.data, only_first=True)
 
     # todo | think about memory management here
     # todo | a sens file is 3.5 gb (with compressed files i guess)
     # todo | a feature tensor should be around 2.6 gb
-    for sample in load_data(cfg.ncut.feature_extraction_2d, only_first=True):
-        sample = sample[0] # unwrap "batch"
-        print(sample)
-        for img in list(sample["color_images"])[:1]: # ! tmp
+    for sample in loader:
+        sample = sample[0]  # unwrap "batch"
+        for img in list(sample["color_images"])[:1]:  # ! tmp
             img = F.to_tensor(img)
             patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
                 img, cfg.ncut.feature_extraction_2d.model.crop_size
@@ -111,7 +99,9 @@ def main(cfg: DictConfig):
 
                 with torch.no_grad():
                     feat_p = model(p)
-                    feat_p = nn.functional.normalize(feat_p, dim=1) # unit clip vector per pixel
+                    feat_p = nn.functional.normalize(
+                        feat_p, dim=1
+                    )  # unit clip vector per pixel
                     feat_p = nn.functional.interpolate(
                         feat_p, scale_factor=2, mode="nearest"
                     )  # model cuts size in half
@@ -146,6 +136,7 @@ def main(cfg: DictConfig):
 
             visualize_feats(img, "img.png")
             visualize_feats(feats, "clip_feats.png")
+
 
 if __name__ == "__main__":
     main()

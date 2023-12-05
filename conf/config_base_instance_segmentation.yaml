@@ -84,3 +84,18 @@ hydra:
     dir: saved/hydra_logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
     # dir: ${general.save_dir}
     subdir: ${hydra.job.num}_${hydra.job.id}
+data:
+  datasets: ScannetVoxelization2cmDataset
+  train_limit_numpoints: 0
+  scannet_path: /mnt/hdd/scannet_csc_preprocessed/
+  sampled_inds: False
+  return_transformation: False
+  category_weights: /home/luebberstedt/scannet/scannet200_category_weights.pkl
+train:
+  train_phase: Val
+SOLO3D:
+  solo_instseg: False
+image_data:
+  use_images: False
+misc:
+  train_stuff: False

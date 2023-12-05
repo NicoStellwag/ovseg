@@ -18,7 +18,7 @@ import open3d as o3d
 import MinkowskiEngine as ME
 import MinkowskiEngine as ME
 
-from datasets.dataset import VoxelizationDataset, DatasetPhase, str2datasetphase_type
+from ovseg.lib.dataset import VoxelizationDataset, DatasetPhase, str2datasetphase_type
 from datasets.preprocessing.utils import load_matrix_from_txt, load_labels
 from utils.pc_utils import read_plyfile, save_point_cloud
 from utils.utils import read_txt, fast_hist, per_class_iu

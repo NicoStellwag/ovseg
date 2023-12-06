@@ -7,7 +7,7 @@ from torch.autograd import Function
 from MinkowskiEngine import SparseTensor
 
 import raycast_cuda
-#import utils.cuda_utils.project_features_cuda
+import project_features_cuda
 
 '''
 2D --> 3D

@@ -90,9 +90,9 @@ class NcutScannetDataset(Dataset):
             mesh_voxel_coords: np array of shape (n_points, 3) of coords normalized w.r.t. voxel size
             mesh_original_coords: np array of shape (n_points, 3) of coords in meters
             mesh_colors: np array of shape (n_points, 3) of RGB colors of points
-            color_images: generator object that loads images np arrays of shape (height, width, channels/3)
+            color_images: generator object that loads images np arrays of shape (height, width, channels(3))
             depth_images: generator object that loads depth images as torch tensors of shape (depth_height, depth_width)
-            color_intrinsics: intinsic paramters of color camera - np array of shape (4, 4)
+            color_intrinsics: intrinsic parameters of color camera - np array of shape (4, 4)
         """
         self.scans = [
             str(os.path.dirname(i))
@@ -113,7 +113,9 @@ class NcutScannetDataset(Dataset):
         # mesh stuff
         mesh_content = ["mesh_voxel_coords", "mesh_original_coords", "mesh_colors"]
         if any(file in self.content for file in mesh_content):
-            mesh_path = str(next(iter(Path(self.scans[idx]).glob(self.mesh_glob_pattern))))
+            mesh_path = str(
+                next(iter(Path(self.scans[idx]).glob(self.mesh_glob_pattern)))
+            )
             assert os.path.isfile(mesh_path), f"mesh file does not exist: {mesh_path}"
             mesh = o3d.io.read_triangle_mesh(mesh_path)
         if "mesh_voxel_coords" in self.content:
@@ -133,9 +135,9 @@ class NcutScannetDataset(Dataset):
             "color_instrinsics",
         ]
         if any(item in self.content for item in image_content):
-            sens_path = str(next(
-                iter(Path(self.scans[idx]).glob(self.sensordata_glob_pattern))
-            ))
+            sens_path = str(
+                next(iter(Path(self.scans[idx]).glob(self.sensordata_glob_pattern)))
+            )
             assert os.path.isfile(sens_path), f"sens file does not exist: {sens_path}"
             sensordata = SensorData(sens_path)
         if "color_images" in self.content:

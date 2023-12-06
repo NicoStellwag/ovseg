@@ -5,7 +5,6 @@ import torch.nn as nn
 import torchvision.transforms.functional as F
 import numpy as np
 from sklearn.decomposition import PCA
-import clip
 from omegaconf import DictConfig
 from PIL import Image
 
@@ -74,29 +73,63 @@ def visualize_feats(feature_image, save_path, cpm=None):
 )
 def main(cfg: DictConfig):
     sys.path.append(hydra.utils.get_original_cwd())
+    from utils.cuda_utils.raycast_image import Project2DFeaturesCUDA
     from ncut.ncut_dataset import NcutScannetDataset
+    from ncut.visualize import visualize_3d_feats
 
     device = torch.device("cuda:0")
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
-    loader = NcutScannetDataset.dataloader_from_hydra(cfg.ncut.feature_extraction_2d.data, only_first=True)
+    loader = NcutScannetDataset.dataloader_from_hydra(
+        cfg.ncut.feature_extraction_2d.data, only_first=True
+    )
 
     # todo | think about memory management here
     # todo | a sens file is 3.5 gb (with compressed files i guess)
     # todo | a feature tensor should be around 2.6 gb
     for sample in loader:
         sample = sample[0]  # unwrap "batch"
-        for img in list(sample["color_images"])[:1]:  # ! tmp
+
+        color_images = list(sample["color_images"])
+        camera_poses = list(sample["camera_poses"])
+
+        # initialize projector
+        img_width = color_images[0].shape[1]  # np images at this point
+        img_height = color_images[0].shape[0]
+        voxel_size = cfg.ncut.feature_extraction_2d.data.dataset.voxel_size
+        projector = Project2DFeaturesCUDA(
+            width=img_width,
+            height=img_height,
+            voxel_size=voxel_size,
+            config={},
+        )
+
+        # initialize other stuff for the projection
+        coords = sample["mesh_voxel_coords"]
+        n_points_full = sample["mesh_voxel_coords"].shape[0]
+        mock_feats = np.zeros(shape=(n_points_full, 1))
+        sparse_tens = NcutScannetDataset.to_sparse_tens(
+            coords, mock_feats, device
+        )  # just used to transform coords for projector
+        proj_coords = sparse_tens.C
+        color_intrinsics = torch.from_numpy(sample["color_intrinsics"]).to(device)
+
+        # initialize empty 3D features
+        n_points_voxelized = proj_coords.shape[0]
+        feature_dim = cfg.ncut.feature_extraction_2d.feature_dim
+        projected_features = torch.zeros(size=(n_points_voxelized, feature_dim))
+        total_hits = torch.zeros(size=(n_points_voxelized, 1))
+
+        for i, (img, pose) in enumerate(zip(color_images, camera_poses)):
+            # patch wise feature extraction
             img = F.to_tensor(img)
             patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
                 img, cfg.ncut.feature_extraction_2d.model.crop_size
             )
-
             feat_patches = []
             for p in patches:
                 p = p.unsqueeze(0)
                 p = p.to(device)
-
                 with torch.no_grad():
                     feat_p = model(p)
                     feat_p = nn.functional.normalize(
@@ -105,12 +138,9 @@ def main(cfg: DictConfig):
                     feat_p = nn.functional.interpolate(
                         feat_p, scale_factor=2, mode="nearest"
                     )  # model cuts size in half
-
                 feat_p = feat_p.detach().cpu()
                 feat_p = feat_p.squeeze(0)
-
                 feat_patches.append(feat_p)
-
             feats = f2dutil.reconstruct_from_patches(
                 feat_patches,
                 img.shape[1],
@@ -121,21 +151,41 @@ def main(cfg: DictConfig):
                 num_cols,
             )
 
-            # tmp: verify clip space by querying with text prompt
-            # textencoder = model.clip_pretrained.encode_text
-            # prompt = clip.tokenize("table")
-            # prompt = prompt.to(device)
-            # with torch.no_grad():
-            #     text_feat = textencoder(prompt)
-            #     text_feat = nn.functional.normalize(text_feat, dim=1)
-            # text_feat = text_feat.detach().cpu()
-            # cosd = nn.CosineSimilarity(dim=1)
-            # sim = cosd(feats, text_feat.unsqueeze(-1).unsqueeze(-1))
-            # print(sim.shape)
-            # visualize_feats(sim, "sim.png")
-
-            visualize_feats(img, "img.png")
             visualize_feats(feats, "clip_feats.png")
+
+            # project to 3D and add to aggregated 3D features
+            feats = feats.to(device).permute(1, 2, 0).unsqueeze(0).unsqueeze(0)
+            print("feats", feats.sum())
+            pose[:3, :] /= voxel_size  # adapt to voxel coord system
+            pose = torch.from_numpy(pose).to(device).unsqueeze(0).unsqueeze(0)
+            curr_projected_features, hit_counts = projector(
+                encoded_2d_features=feats,
+                coords=proj_coords,
+                view_matrix=pose,
+                intrinsic_params=color_intrinsics,
+            )
+            print("curr proj feats", curr_projected_features.sum())
+            print("curr proj hits", hit_counts.sum())
+            hit_counts = hit_counts.cpu()
+            curr_projected_features = curr_projected_features.cpu()
+            hit_points = hit_counts > 0
+            projected_features[hit_points] += curr_projected_features[hit_points]
+            total_hits[
+                hit_points
+            ] += 1  # projector already takes mean if points are hit multiple times
+
+            # visualize_feats(img, "img.png")
+            # visualize_feats(feats, "clip_feats.png")
+
+            print(f"Processed image {i}")
+            break  # ! tmp
+
+        # take mean feature for every 3D point
+        projected_features = projected_features / (total_hits + 1e-8)
+
+        visualize_3d_feats(
+            sample["mesh_original_coords"], projected_features, "./feats3d.html"
+        )
 
 
 if __name__ == "__main__":

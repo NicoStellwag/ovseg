@@ -88,6 +88,7 @@ data:
   datasets: ScannetVoxelization2cmDataset
   train_limit_numpoints: 0
   scannet_path: /mnt/hdd/scannet_csc_preprocessed/
+  felz_path: /mnt/hdd/scannet_test_segments/
   sampled_inds: False
   return_transformation: False
   category_weights: /home/luebberstedt/scannet/scannet200_category_weights.pkl
@@ -96,6 +97,21 @@ train:
 SOLO3D:
   solo_instseg: False
 image_data:
-  use_images: False
+  model: 
+  use_images: True
+  load_precomputed: False
+  dino_vit_feature: None
 misc:
   train_stuff: False
+net:
+  num_in_channels: 
+freemask:
+  modality: both
+  segment_dimension_order: (0 1)
+  aggregation_mode: mean
+return_transformation: True
+data_aug_color_scaling_factor: 1.0
+data_aug_patch_dropout_ratio: 0.2
+cache_data: False
+test:
+  visualize: True

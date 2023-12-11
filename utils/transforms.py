@@ -394,8 +394,10 @@ class cfl_collate_fn_factory:
         self.limit_numpoints = limit_numpoints
 
     def __call__(self, list_data):
-        coords, feats, labels, scene_names = list(zip(*list_data))
-        coords_batch, feats_batch, labels_batch, scene_names_batch = [], [], [], []
+        # appends the input data for batch_size > 1
+        coords, feats, labels, instance_info, scene_name, img, camera_poses, color_intrinsics, segIndices, segConnectivity, transformation = list(zip(*list_data))
+        
+        coords_batch, feats_batch, labels_batch, instance_batch, scene_name_batch, img_batch, camera_posses_batch, color_intrinsics_batch, segIndices_batch, segConnectivity_batch, transformation_batch = [], [], [], [], [], [], [], [], [], [], []
 
         batch_id = 0
         batch_num_points = 0
@@ -413,13 +415,25 @@ class cfl_collate_fn_factory:
             coords_batch.append(torch.from_numpy(coords[batch_id]).int())
             feats_batch.append(torch.from_numpy(feats[batch_id]))
             labels_batch.append(torch.from_numpy(labels[batch_id]).int())
-            scene_names_batch.append(scene_names[batch_id])
+            instance_batch.append(instance_info[batch_id])
+            scene_name_batch.append(scene_name[batch_id])
+            img_batch.append(torch.from_numpy(img[batch_id]).float())
+            camera_posses_batch.append(camera_poses[batch_id])
+            color_intrinsics_batch.append(color_intrinsics[batch_id])
+            segIndices_batch.append(torch.from_numpy(segIndices[batch_id]).int())
+            segConnectivity_batch.append(torch.from_numpy(segConnectivity[batch_id]).int())
+            transformation_batch.append(transformation[batch_id])
 
             batch_id += 1
 
         # Concatenate all lists
         coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(coords_batch, feats_batch, labels_batch)
-        return coords_batch, feats_batch.float(), labels_batch, scene_names_batch
+        img_batch = np.stack(img_batch, axis=0)
+        camera_posses_batch = np.stack(camera_posses_batch, axis=0)
+        color_intrinsics_batch = np.stack(color_intrinsics_batch, axis=0)
+        segIndices_batch = np.stack(segIndices_batch, axis=0)
+        segConnectivity_batch = np.stack(segConnectivity_batch, axis=0)
+        return coords_batch, feats_batch.float(), labels_batch, scene_name_batch, torch.tensor(img_batch), torch.tensor(camera_posses_batch), torch.tensor(color_intrinsics_batch), torch.tensor(segIndices_batch), segConnectivity_batch, np.array(transformation_batch)
 
 
 class cflt_collate_fn_factory:

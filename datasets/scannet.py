@@ -13,11 +13,16 @@ import pickle
 import torch
 import numpy as np
 from scipy import spatial
+import json
+from PIL import Image
 
-from ovseg.lib.dataset import VoxelizationDataset, DatasetPhase, str2datasetphase_type
+from lib.dataset import VoxelizationDataset, DatasetPhase, str2datasetphase_type
 from lib.pc_utils import read_plyfile, save_point_cloud
-from lib.utils import read_txt, fast_hist, per_class_iu
+from lib.utils import read_txt, get_felz, fast_hist, per_class_iu
 from lib.io3d import write_triangle_mesh, create_color_palette
+
+from os import listdir
+from os.path import isfile, join
 
 # Import from project root
 sys.path.insert(0, '../../lib')
@@ -53,14 +58,14 @@ class ScannetVoxelizationDataset(VoxelizationDataset):
     ROTATION_AXIS = 'z'
     LOCFEAT_IDX = 2
     IS_FULL_POINTCLOUD_EVAL = True
+    depth_shape = (480,640)
 
     # If trainval.txt does not exist, copy train.txt and add contents from val.txt
     DATA_PATH_FILE = {
         DatasetPhase.Train: 'scannetv2_train.txt',
         DatasetPhase.Val: 'scannetv2_val.txt',
         DatasetPhase.TrainVal: 'scannetv2_trainval.txt',
-        DatasetPhase.Test: 'scannetv2_test.txt',
-        DatasetPhase.Debug: 'debug.txt'
+        DatasetPhase.Test: 'scannetv2_test.txt'
     }
 
     def __init__(self,
@@ -76,6 +81,7 @@ class ScannetVoxelizationDataset(VoxelizationDataset):
             phase = str2datasetphase_type(phase)
         # Use cropped rooms for train/val
         data_root = config.data.scannet_path
+        felz_root = config.data.felz_path
         if phase not in [DatasetPhase.Train, DatasetPhase.TrainVal]:
             self.CLIP_BOUND = self.TEST_CLIP_BOUND
 
@@ -87,12 +93,19 @@ class ScannetVoxelizationDataset(VoxelizationDataset):
         self.sampled_inds = {}
         if config.data.sampled_inds and phase == DatasetPhase.Train:
             self.sampled_inds = torch.load(config.data.sampled_inds)
-
+        
+        
+        felz_paths = [f for f in listdir(felz_root) if isfile(join(felz_root, f))]
+        data_paths.sort()
+        felz_paths = get_felz(data_paths,felz_paths)
         data_paths = [data_path + '.pth' for data_path in data_paths]
+
         logging.info('Loading {}: {}'.format(self.__class__.__name__, self.DATA_PATH_FILE[phase]))
         super().__init__(
             data_paths,
+            felz_paths,
             data_root=data_root,
+            felz_root=felz_root,
             prevoxel_transform=prevoxel_transform,
             input_transform=input_transform,
             target_transform=target_transform,
@@ -129,12 +142,10 @@ class ScannetVoxelizationDataset(VoxelizationDataset):
         return pointcloud
 
     def load_data(self, index):
+        # loads all the data needed
+
         filepath = self.data_root / self.data_paths[index]
-        pointcloud = torch.load(filepath)
-        coords = pointcloud[0].astype(np.float32)
-        feats = pointcloud[1].astype(np.float32)
-        labels = pointcloud[2].astype(np.int32)
-        instances = pointcloud[3].astype(np.int32)
+        felzpath = self.felz_root / self.felz_paths[index]
         scene_name = filepath.stem
         if self.sampled_inds:
             scene_name = self.get_output_id(index)
@@ -143,8 +154,38 @@ class ScannetVoxelizationDataset(VoxelizationDataset):
             mask[sampled_inds] = False
             labels[mask] = 0
             instances[mask] = 0
+            
+        pointcloud = torch.load(filepath)
+        coords = pointcloud[0].astype(np.float32)
+        feats = pointcloud[1].astype(np.float32)
+        labels = pointcloud[2].astype(np.int32)
+        instances = pointcloud[3].astype(np.int32)
+        
+        # Opening felz JSON file
+        f = open(felzpath)
+        data = json.load(f)
+        segIndices = np.array(data["segIndices"],dtype=np.int32)
+        segConnectivity = np.array(data["segConnectivity"],dtype=np.int32)
+        f.close
+        images = []
+        camera_poses = []
+        
+        #maybe memory problem when loading many images
+        paths = os.listdir("/mnt/hdd/scannet_2d_data/" + scene_name + "/color/")
+        path2d = "/mnt/hdd/scannet_2d_data/" + scene_name
+        for path in paths[:1]:
+            img = Image.open(path2d + "/color/" + path)
+            img = np.array(img)
+            images.append(img)
+            camera_poses.append(np.loadtxt(path2d + "/pose/" + path.replace(".jpg",".txt"), usecols=range(0,4), dtype=np.float32))
+        images = np.stack(images, axis=0)
+        images = np.moveaxis(images, [0, 1, 2, 3], [0, 3, 2, 1])
+        camera_poses = np.stack(camera_poses, axis=0)
+        
+        color_intrinsics = np.loadtxt("/mnt/hdd/scannet_2d_data/" + scene_name + "/intrinsic/intrinsic_color.txt", usecols=range(0,4), dtype=np.float32)
+        color_intrinsics = np.array([color_intrinsics[0][0],color_intrinsics[1][1],color_intrinsics[0][2],color_intrinsics[1][2]]).reshape(1,-1)
 
-        return coords, feats, labels, instances, scene_name
+        return coords, feats, labels, instances, scene_name, images, camera_poses, color_intrinsics, segIndices, segConnectivity
 
     def get_original_pointcloud(self, coords, transformation, iteration):
         logging.info('===> Start testing on original pointcloud space.')

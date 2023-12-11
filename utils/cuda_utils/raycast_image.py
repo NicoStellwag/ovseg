@@ -18,7 +18,8 @@ and use those to iterate over all voxels and copy the features
 class Project2DFeaturesCUDA(nn.Module):
     def __init__(self, width, height, voxel_size, config, depth_min=0.1, depth_max=4.0):
         super(Project2DFeaturesCUDA, self).__init__()
-
+        depth_min = .1
+        depth_max = 100.
         self.image_width = width
         self.image_height = height
         self.voxel_size = voxel_size
@@ -37,9 +38,11 @@ class Project2DFeaturesCUDA(nn.Module):
         shifts = []
         local_coords = coords.detach().clone()
         local_views = view_matrix.detach().clone()
+        
         for b in range(batch_size):
             batch_mask = coords[:, 0] == b
             shift = torch.amin(coords[batch_mask, 1:], 0)
+            fg = coords[batch_mask, 1:]
             shifts += [shift]
             local_coords[batch_mask, 1:] = local_coords[batch_mask, 1:] - shift
 
@@ -52,7 +55,7 @@ class Project2DFeaturesCUDA(nn.Module):
                                       device=local_coords.device)
 
         occupancies_3d = occupancies_3d.dense()[0].long().permute(0, 1, 4, 3, 2).contiguous().squeeze(1)  # (batch, z, y, x)
-
+        
         # Initialize CUDA tensors
         mapping2dto3d_num = torch.zeros(voxel_num, dtype=torch.int, device=occupancies_3d.device)
 

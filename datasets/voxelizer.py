@@ -11,7 +11,7 @@ import MinkowskiEngine as ME
 from scipy.linalg import expm, norm
 
 
-# Rotation matrix along axis with angle theta
+# Rotation matrix along axis with angle label_maptheta
 def M(axis, theta):
   return expm(np.cross(np.eye(3), axis / norm(axis) * theta))
 
@@ -111,7 +111,7 @@ class Voxelizer:
         (coords[:, 2] < (lim[2][1] + center[2])))
     return clip_inds
 
-  def voxelize(self, coords, feats, labels, instances, center=None):
+  def voxelize(self, coords, feats, labels, instances, segIndices, center=None):
 
     assert coords.shape[1] == 3 and coords.shape[0] == feats.shape[0] and coords.shape[0]
     if self.clip_bound is not None:
@@ -149,8 +149,9 @@ class Voxelizer:
     coords_aug, feats, labels, mapping = ME.utils.sparse_quantize(
         coords_aug, feats, labels=labels, return_index=True, ignore_label=self.ignore_label)
     instances = instances[mapping]
+    segIndices = segIndices[mapping]
 
-    return coords_aug, feats, labels, instances, rigid_transformation.flatten()
+    return coords_aug, feats, labels, instances, segIndices, rigid_transformation.flatten()
 
   def voxelize_temporal(self,
                         coords_t,

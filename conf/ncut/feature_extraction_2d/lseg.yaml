@@ -7,6 +7,7 @@ coords_filename: coords.npy
 feats_filename: lseg_feats.npy
 feature_dim: 512
 model_scale_fac: 0.5 # lseg model cuts size in half
+image_batch_size: 16 # inference on how many images at the same time
 model:
   weights_path: /mnt/hdd/lseg_weights/lseg_minimal_e200.ckpt
   weights_type: state_dict # alternative: checkpoint

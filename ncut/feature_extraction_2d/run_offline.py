@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 from PIL import Image
 import logging
 import os
+import math
 
 import f2dutil
 
@@ -30,7 +31,7 @@ def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
     return model.eval().to(device)
 
 
-def visualize_feats(feature_image, save_path, cpm=None):
+def visualize_feats(feature_image, save_path):
     """
     Visualize and save torch tensor image (C, H, W).
     If the C > 3, PCA is applied to map it down to 3.
@@ -119,10 +120,11 @@ def main(cfg: DictConfig):
         cfg.ncut.feature_extraction_2d.data, only_first=True
     )
 
-    for sample in loader:
+    n_scenes = len(loader)
+    for i_scene, sample in enumerate(loader):
         sample = sample[0]  # unwrap "batch"
 
-        log.info(f"** {sample['scene_name']}")
+        log.info(f"** {sample['scene_name']} ({i_scene + 1}/{n_scenes})")
 
         color_images = list(sample["color_images"])
         camera_poses = list(
@@ -171,23 +173,40 @@ def main(cfg: DictConfig):
         projected_features = torch.zeros(size=(n_points_voxelized, feature_dim))
         total_hits = torch.zeros(size=(n_points_voxelized, 1))
 
-        for i, (img, pose) in enumerate(zip(color_images, camera_poses)):
+        n_imgs = len(color_images)
+        img_batch_size = cfg.ncut.feature_extraction_2d.image_batch_size
+        n_batches = math.ceil(len(color_images) / img_batch_size)
+        for i in range(n_batches):
+            # create a batch of images and poses
+            log.info(f"\t image batch ({i + 1}/{n_batches})")
+            start = i * img_batch_size
+            end = min((i + 1) * img_batch_size, n_imgs)
+            images = torch.stack(
+                [F.to_tensor(i) for i in color_images[start:end]], dim=0
+            )  # (img_batch_size, C, H, W)
+            poses = torch.stack(
+                [torch.from_numpy(i) for i in camera_poses[start:end]], dim=0
+            )  # (img_batch_size, 4, 4)
+
             # feature extraction
-            img = F.to_tensor(img)
-            img = img.unsqueeze(0).to(device)
+            images = images.to(device)
             with torch.no_grad():
-                feats = model(img)
-            feats = nn.functional.normalize(feats, dim=1)
-            feats = feats.detach().cpu().squeeze(0)
+                feats = model(images).detach()
+            feats = nn.functional.normalize(feats, dim=1)  # unit clip feat vectors
 
             # project to 3D and add to aggregated 3D features
-            feats = feats.to(device).permute(1, 2, 0).unsqueeze(0).unsqueeze(0)
-            pose[:3, 3] = pose[:3, 3] / voxel_size  # adapt shift to voxel coord system
-            pose = torch.from_numpy(pose).to(device).unsqueeze(0).unsqueeze(0)
+            feats = feats.permute(
+                0, 2, 3, 1
+            )  # (img_batch_size, C, H, W) -> (img_batch_size, H, W, C)
+            feats = feats.unsqueeze(0)
+            poses[:, :3, 3] = (
+                poses[:, :3, 3] / voxel_size
+            )  # adapt shift to voxel coord system
+            poses = poses.to(device).unsqueeze(0)
             curr_projected_features, hit_counts = projector(
                 encoded_2d_features=feats,  # (batch_num, view_num, height, width, channels)
                 coords=batched_sparse_voxel_coords,  # ME sparse tens coords
-                view_matrix=pose,  # (batch_num, view_num, 4, 4)
+                view_matrix=poses,  # (batch_num, view_num, 4, 4)
                 intrinsic_params=color_intrinsics,  # (batch_num, 4) [fx, fy, mx, my]
             )
             hit_counts = hit_counts.cpu()
@@ -195,8 +214,6 @@ def main(cfg: DictConfig):
             hit_points = hit_counts > 0
             projected_features[hit_points] += curr_projected_features[hit_points]
             total_hits[hit_points] += 1  # projector already takes mean
-
-            log.info(f"\timage {i}")
 
         # take mean feature for every 3D point
         projected_features = projected_features / (total_hits + 1e-8)
@@ -226,11 +243,7 @@ def main(cfg: DictConfig):
         log.info(f"Saved: {feats_file}")
 
         # # visualize
-        # visualize_3d_feats(
-        #     original_coords,
-        #     high_res_feats,
-        #     "./high_res_feats3d.html"
-        # )
+        # visualize_3d_feats(original_coords, high_res_feats, "./high_res_feats3d.html")
         # visualize_3d_feats(
         #     sparse_voxel_coords,
         #     projected_features,

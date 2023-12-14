@@ -67,6 +67,7 @@ class NcutScannetDataset(Dataset):
         sensordata_glob_pattern,
         mesh_glob_pattern,
         voxel_size,
+        scale_colors_to_depth_resolution,
         content=[
             "mesh_voxel_coords",
             "mesh_original_coords",
@@ -85,6 +86,8 @@ class NcutScannetDataset(Dataset):
         sensordata_filename_pattern: glob pattern for sens file
         mesh_filename_pattern: glob pattern for mesh ply file
         voxel_size: voxel size in meters
+        scale_colors_to_depth_resolution: if true, color images are downscaled to depth
+            image resolution and intrinsics are adapted accordingly
         content: dict entries of a sample
             scene_name (always contained): scene name as string of format sceneXXXX_XX
             mesh_voxel_coords: np array of shape (n_points, 3) of coords normalized w.r.t. voxel size
@@ -101,6 +104,7 @@ class NcutScannetDataset(Dataset):
         self.sensordata_glob_pattern = sensordata_glob_pattern
         self.mesh_glob_pattern = mesh_glob_pattern
         self.voxel_size = voxel_size
+        self.scale_colors_to_depth_resolution = scale_colors_to_depth_resolution
         self.content = content
 
     def __len__(self):
@@ -140,14 +144,33 @@ class NcutScannetDataset(Dataset):
             )
             assert os.path.isfile(sens_path), f"sens file does not exist: {sens_path}"
             sensordata = SensorData(sens_path)
+            if self.scale_colors_to_depth_resolution:
+                depth_h, depth_w = next(
+                    iter(depth_images_from_sensor_data(sensordata))
+                ).shape
+                img_h, img_w, _ = next(
+                    iter(color_images_from_sensor_data(sensordata))
+                ).shape
+                scale_x = depth_w / img_w
+                scale_y = depth_h / img_h
+
         if "color_images" in self.content:
-            sample["color_images"] = color_images_from_sensor_data(sensordata)
+            if self.scale_colors_to_depth_resolution:
+                sample["color_images"] = color_images_from_sensor_data(
+                    sensordata, image_size=(depth_h, depth_w)
+                )
+            else:
+                sample["color_images"] = color_images_from_sensor_data(sensordata)
         if "depth_images" in self.content:
             sample["depth_images"] = depth_images_from_sensor_data(sensordata)
         if "camera_poses" in self.content:
             sample["camera_poses"] = poses_from_sensor_data(sensordata)
         if "color_intrinsics" in self.content:
-            sample["color_intrinsics"] = color_intrinsics_from_sensor_data(sensordata)
+            intr = color_intrinsics_from_sensor_data(sensordata)
+            if self.scale_colors_to_depth_resolution:
+                intr[0, 0], intr[1, 1] = intr[0, 0] * scale_x, intr[1, 1] * scale_y
+                intr[0, 2], intr[1, 2] = intr[0, 2] * scale_x, intr[1, 2] * scale_y
+            sample["color_intrinsics"] = intr
 
         return sample
 

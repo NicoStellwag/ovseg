@@ -18,8 +18,6 @@ and use those to iterate over all voxels and copy the features
 class Project2DFeaturesCUDA(nn.Module):
     def __init__(self, width, height, voxel_size, config, depth_min=0.1, depth_max=4.0):
         super(Project2DFeaturesCUDA, self).__init__()
-        depth_min = .1
-        depth_max = 100.
         self.image_width = width
         self.image_height = height
         self.voxel_size = voxel_size

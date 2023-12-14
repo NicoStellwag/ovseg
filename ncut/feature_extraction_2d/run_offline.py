@@ -1,5 +1,6 @@
 import sys
 import hydra
+from sklearn.neighbors import KDTree
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as F
@@ -7,8 +8,13 @@ import numpy as np
 from sklearn.decomposition import PCA
 from omegaconf import DictConfig
 from PIL import Image
+import logging
+import os
 
 import f2dutil
+
+
+log = logging.getLogger(__name__)
 
 
 def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
@@ -52,20 +58,49 @@ def visualize_feats(feature_image, save_path, cpm=None):
     img.save(save_path)
 
 
-# def associate_features_to_original_coords(
-#     y_hat: ME.SparseTensor, cfg_data: DictConfig, original_coords
-# ):
-#     """
-#     Transforming the ply file to a minkowski engine sparse tensor is lossy
-#     because several points map to the same voxel.
-#     This function assigns the nearest neighbor's features to each of the original points.
-#     """
-#     low_res_coords = y_hat.C[:, 1:].cpu().numpy()  # slice off batch dim
-#     high_res_coords = original_coords / cfg_data.voxel_size
-#     kdtree = KDTree(low_res_coords)
-#     _, nn_indices = kdtree.query(high_res_coords, k=1)
-#     high_res_feats = y_hat.F[nn_indices].cpu().numpy()
-#     return high_res_feats
+def associate_voxelized_features_to_high_res_coords(
+    low_res_coords, low_res_feats, high_res_coords
+):
+    """
+    Transforming the ply file to a minkowski engine sparse tensor is lossy
+    because several points map to the same voxel.
+    This function assigns the nearest neighbor's features to each of the original points.
+    """
+    kdtree = KDTree(low_res_coords)
+    _, nn_indices = kdtree.query(high_res_coords, k=1)
+    high_res_feats = low_res_feats[nn_indices].squeeze(1)
+    return high_res_feats
+
+
+def patch_wise_inference(cfg, device, model, img):
+    patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
+        img, cfg.ncut.feature_extraction_2d.model.crop_size
+    )
+    feat_patches = []
+    for p in patches:
+        p = p.unsqueeze(0)
+        p = p.to(device)
+        with torch.no_grad():
+            feat_p = model(p)
+            feat_p = nn.functional.normalize(
+                feat_p, dim=1
+            )  # unit clip vector per pixel
+            feat_p = nn.functional.interpolate(
+                feat_p, scale_factor=2, mode="nearest"
+            )  # model cuts size in half
+        feat_p = feat_p.detach().cpu()
+        feat_p = feat_p.squeeze(0)
+        feat_patches.append(feat_p)
+    feats = f2dutil.reconstruct_from_patches(
+        feat_patches,
+        img.shape[1],
+        img.shape[2],
+        pad_h,
+        pad_w,
+        num_rows,
+        num_cols,
+    )
+    return feats
 
 
 @hydra.main(
@@ -84,108 +119,123 @@ def main(cfg: DictConfig):
         cfg.ncut.feature_extraction_2d.data, only_first=True
     )
 
-    # todo | think about memory management here
-    # todo | a sens file is 3.5 gb (with compressed files i guess)
-    # todo | a feature tensor should be around 2.6 gb
     for sample in loader:
         sample = sample[0]  # unwrap "batch"
 
+        log.info(f"** {sample['scene_name']}")
+
         color_images = list(sample["color_images"])
-        camera_poses = list(sample["camera_poses"])
+        camera_poses = list(
+            sample["camera_poses"]
+        )  # note that these already are inverse extrinsics!
+
+        # the feature extractor might return lower res features than the input image
+        model_scale_fac = cfg.ncut.feature_extraction_2d.get("model_scale_fac", 1.0)
 
         # initialize projector
         img_width = color_images[0].shape[1]  # np images at this point
         img_height = color_images[0].shape[0]
         voxel_size = cfg.ncut.feature_extraction_2d.data.dataset.voxel_size
         projector = Project2DFeaturesCUDA(
-            width=img_width,
-            height=img_height,
+            width=img_width * model_scale_fac,
+            height=img_height * model_scale_fac,
             voxel_size=voxel_size,
             config={},
         )
 
         # initialize other stuff for the projection
-        coords = sample["mesh_voxel_coords"]
-        n_points_full = sample["mesh_voxel_coords"].shape[0]
+        voxel_coords = sample["mesh_voxel_coords"]
+        n_points_full = voxel_coords.shape[0]
         mock_feats = np.zeros(shape=(n_points_full, 1))
         sparse_tens = NcutScannetDataset.to_sparse_tens(
-            coords, mock_feats, device
+            voxel_coords, mock_feats, device
         )  # just used to transform coords for projector
-        proj_coords = sparse_tens.C
-        color_intrinsics = torch.from_numpy(sample["color_intrinsics"]).to(device)
+        batched_sparse_voxel_coords = sparse_tens.C
+        color_intrinsics = sample["color_intrinsics"]
+        fx, fy, mx, my = (
+            color_intrinsics[0, 0],
+            color_intrinsics[1, 1],
+            color_intrinsics[0, 2],
+            color_intrinsics[1, 2],
+        )
+        color_intrinsics = torch.Tensor([fx, fy, mx, my])
+        # apparently intrinsics are already normalized w.r.t. voxel size
+        # but if the feature extractor scales down the image during inference we adapt
+        # the intrinsics accordingly instead of upscaling again
+        color_intrinsics = color_intrinsics * model_scale_fac
+        color_intrinsics = color_intrinsics.unsqueeze(0).to(device)
 
         # initialize empty 3D features
-        n_points_voxelized = proj_coords.shape[0]
+        n_points_voxelized = batched_sparse_voxel_coords.shape[0]
         feature_dim = cfg.ncut.feature_extraction_2d.feature_dim
         projected_features = torch.zeros(size=(n_points_voxelized, feature_dim))
         total_hits = torch.zeros(size=(n_points_voxelized, 1))
 
         for i, (img, pose) in enumerate(zip(color_images, camera_poses)):
-            # patch wise feature extraction
+            # feature extraction
             img = F.to_tensor(img)
-            patches, pad_h, pad_w, num_rows, num_cols = f2dutil.split_to_patches(
-                img, cfg.ncut.feature_extraction_2d.model.crop_size
-            )
-            feat_patches = []
-            for p in patches:
-                p = p.unsqueeze(0)
-                p = p.to(device)
-                with torch.no_grad():
-                    feat_p = model(p)
-                    feat_p = nn.functional.normalize(
-                        feat_p, dim=1
-                    )  # unit clip vector per pixel
-                    feat_p = nn.functional.interpolate(
-                        feat_p, scale_factor=2, mode="nearest"
-                    )  # model cuts size in half
-                feat_p = feat_p.detach().cpu()
-                feat_p = feat_p.squeeze(0)
-                feat_patches.append(feat_p)
-            feats = f2dutil.reconstruct_from_patches(
-                feat_patches,
-                img.shape[1],
-                img.shape[2],
-                pad_h,
-                pad_w,
-                num_rows,
-                num_cols,
-            )
-
-            visualize_feats(feats, "clip_feats.png")
+            img = img.unsqueeze(0).to(device)
+            with torch.no_grad():
+                feats = model(img)
+            feats = nn.functional.normalize(feats, dim=1)
+            feats = feats.detach().cpu().squeeze(0)
 
             # project to 3D and add to aggregated 3D features
             feats = feats.to(device).permute(1, 2, 0).unsqueeze(0).unsqueeze(0)
-            print("feats", feats.sum())
-            pose[:3, :] /= voxel_size  # adapt to voxel coord system
+            pose[:3, 3] = pose[:3, 3] / voxel_size  # adapt shift to voxel coord system
             pose = torch.from_numpy(pose).to(device).unsqueeze(0).unsqueeze(0)
             curr_projected_features, hit_counts = projector(
-                encoded_2d_features=feats,
-                coords=proj_coords,
-                view_matrix=pose,
-                intrinsic_params=color_intrinsics,
+                encoded_2d_features=feats,  # (batch_num, view_num, height, width, channels)
+                coords=batched_sparse_voxel_coords,  # ME sparse tens coords
+                view_matrix=pose,  # (batch_num, view_num, 4, 4)
+                intrinsic_params=color_intrinsics,  # (batch_num, 4) [fx, fy, mx, my]
             )
-            print("curr proj feats", curr_projected_features.sum())
-            print("curr proj hits", hit_counts.sum())
             hit_counts = hit_counts.cpu()
             curr_projected_features = curr_projected_features.cpu()
             hit_points = hit_counts > 0
             projected_features[hit_points] += curr_projected_features[hit_points]
-            total_hits[
-                hit_points
-            ] += 1  # projector already takes mean if points are hit multiple times
+            total_hits[hit_points] += 1  # projector already takes mean
 
-            # visualize_feats(img, "img.png")
-            # visualize_feats(feats, "clip_feats.png")
-
-            print(f"Processed image {i}")
-            break  # ! tmp
+            log.info(f"\timage {i}")
 
         # take mean feature for every 3D point
         projected_features = projected_features / (total_hits + 1e-8)
 
-        visualize_3d_feats(
-            sample["mesh_original_coords"], projected_features, "./feats3d.html"
+        # associate back to original coord system
+        original_coords = sample["mesh_original_coords"]
+        sparse_voxel_coords = batched_sparse_voxel_coords[:, 1:].cpu().numpy()
+        high_res_feats = associate_voxelized_features_to_high_res_coords(
+            low_res_coords=sparse_voxel_coords,
+            low_res_feats=projected_features,
+            high_res_coords=voxel_coords,  # same order as original coords
         )
+
+        # save as np arrays
+        scene_name = sample["scene_name"]
+        scan_dir = os.path.join(cfg.ncut.feature_extraction_2d.save_dir, scene_name)
+        os.makedirs(scan_dir, exist_ok=True)
+        coords_file = os.path.join(
+            scan_dir, cfg.ncut.feature_extraction_2d.coords_filename
+        )
+        feats_file = os.path.join(
+            scan_dir, cfg.ncut.feature_extraction_2d.feats_filename
+        )
+        np.save(coords_file, original_coords)
+        log.info(f"Saved: {coords_file}")
+        np.save(feats_file, high_res_feats)
+        log.info(f"Saved: {feats_file}")
+
+        # # visualize
+        # visualize_3d_feats(
+        #     original_coords,
+        #     high_res_feats,
+        #     "./high_res_feats3d.html"
+        # )
+        # visualize_3d_feats(
+        #     sparse_voxel_coords,
+        #     projected_features,
+        #     "./feats3d.html",
+        # )
 
 
 if __name__ == "__main__":

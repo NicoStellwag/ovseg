@@ -3,11 +3,14 @@
 # https://github.com/krrish94/lseg-minimal
 # (follow installation instructions described there)
 save_dir: /mnt/hdd/ncut_features/2d/lseg
+coords_filename: coords.npy
+feats_filename: lseg_feats.npy
 feature_dim: 512
+model_scale_fac: 0.5 # lseg model cuts size in half
 model:
   weights_path: /mnt/hdd/lseg_weights/lseg_minimal_e200.ckpt
   weights_type: state_dict # alternative: checkpoint
-  _target_: lseg.modules.models.lseg_net.LSegNet
+  _target_: lseg.lseg_net.LSegNet
   backbone: clip_vitl16_384
   features: 256
   crop_size: 480
@@ -22,6 +25,7 @@ data:
     sensordata_glob_pattern: "*.sens"
     mesh_glob_pattern: "*_vh_clean_2.ply"
     voxel_size: 0.02
+    scale_colors_to_depth_resolution: true
     content:
       - color_images
       - camera_poses

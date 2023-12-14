@@ -68,6 +68,7 @@ class NcutScannetDataset(Dataset):
         mesh_glob_pattern,
         voxel_size,
         scale_colors_to_depth_resolution,
+        frame_skip=1,
         content=[
             "mesh_voxel_coords",
             "mesh_original_coords",
@@ -88,6 +89,7 @@ class NcutScannetDataset(Dataset):
         voxel_size: voxel size in meters
         scale_colors_to_depth_resolution: if true, color images are downscaled to depth
             image resolution and intrinsics are adapted accordingly
+        frame_skip: every kth frame for color images, depth images, and poses
         content: dict entries of a sample
             scene_name (always contained): scene name as string of format sceneXXXX_XX
             mesh_voxel_coords: np array of shape (n_points, 3) of coords normalized w.r.t. voxel size
@@ -105,6 +107,7 @@ class NcutScannetDataset(Dataset):
         self.mesh_glob_pattern = mesh_glob_pattern
         self.voxel_size = voxel_size
         self.scale_colors_to_depth_resolution = scale_colors_to_depth_resolution
+        self.frame_skip = frame_skip
         self.content = content
 
     def __len__(self):
@@ -157,14 +160,14 @@ class NcutScannetDataset(Dataset):
         if "color_images" in self.content:
             if self.scale_colors_to_depth_resolution:
                 sample["color_images"] = color_images_from_sensor_data(
-                    sensordata, image_size=(depth_h, depth_w)
+                    sensordata, image_size=(depth_h, depth_w), frame_skip=self.frame_skip
                 )
             else:
-                sample["color_images"] = color_images_from_sensor_data(sensordata)
+                sample["color_images"] = color_images_from_sensor_data(sensordata, frame_skip=self.frame_skip)
         if "depth_images" in self.content:
-            sample["depth_images"] = depth_images_from_sensor_data(sensordata)
+            sample["depth_images"] = depth_images_from_sensor_data(sensordata, frame_skip=self.frame_skip)
         if "camera_poses" in self.content:
-            sample["camera_poses"] = poses_from_sensor_data(sensordata)
+            sample["camera_poses"] = poses_from_sensor_data(sensordata, frame_skip=self.frame_skip)
         if "color_intrinsics" in self.content:
             intr = color_intrinsics_from_sensor_data(sensordata)
             if self.scale_colors_to_depth_resolution:

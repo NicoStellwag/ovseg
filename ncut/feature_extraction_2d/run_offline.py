@@ -117,7 +117,7 @@ def main(cfg: DictConfig):
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
     loader = NcutScannetDataset.dataloader_from_hydra(
-        cfg.ncut.feature_extraction_2d.data, only_first=True
+        cfg.ncut.feature_extraction_2d.data, only_first=False
     )
 
     n_scenes = len(loader)
@@ -218,6 +218,10 @@ def main(cfg: DictConfig):
         # take mean feature for every 3D point
         projected_features = projected_features / (total_hits + 1e-8)
 
+        log.info(
+            f"Number of points that were not hit: {(projected_features.sum(dim=1) == 0.).int().sum()}"
+        )
+
         # associate back to original coord system
         original_coords = sample["mesh_original_coords"]
         sparse_voxel_coords = batched_sparse_voxel_coords[:, 1:].cpu().numpy()
@@ -227,7 +231,7 @@ def main(cfg: DictConfig):
             high_res_coords=voxel_coords,  # same order as original coords
         )
 
-        # save as np arrays
+        # save data and visualization
         scene_name = sample["scene_name"]
         scan_dir = os.path.join(cfg.ncut.feature_extraction_2d.save_dir, scene_name)
         os.makedirs(scan_dir, exist_ok=True)
@@ -241,6 +245,12 @@ def main(cfg: DictConfig):
         log.info(f"Saved: {coords_file}")
         np.save(feats_file, high_res_feats)
         log.info(f"Saved: {feats_file}")
+        visualization_filename = cfg.ncut.feature_extraction_2d.get(
+            "visualization_filename", None
+        )
+        if visualization_filename:
+            visualization_file = os.path.join(scan_dir, visualization_filename)
+            visualize_3d_feats(original_coords, high_res_feats, visualization_file)
 
         # # visualize
         # visualize_3d_feats(original_coords, high_res_feats, "./high_res_feats3d.html")

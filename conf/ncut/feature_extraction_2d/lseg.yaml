@@ -3,8 +3,9 @@
 # https://github.com/krrish94/lseg-minimal
 # (follow installation instructions described there)
 save_dir: /mnt/hdd/ncut_features/2d/lseg
-coords_filename: coords.npy
-feats_filename: lseg_feats.npy
+coords_filename: coords.npy # npy
+feats_filename: lseg_feats.npy # npy
+visualization_filename: visualization.html # html
 feature_dim: 512
 model_scale_fac: 0.5 # lseg model cuts size in half
 image_batch_size: 16 # inference on how many images at the same time
@@ -27,6 +28,7 @@ data:
     mesh_glob_pattern: "*_vh_clean_2.ply"
     voxel_size: 0.02
     scale_colors_to_depth_resolution: true
+    frame_skip: 10
     content:
       - color_images
       - camera_poses

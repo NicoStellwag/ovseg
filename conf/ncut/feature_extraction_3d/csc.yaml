@@ -1,5 +1,7 @@
 # @package _group_
 save_dir: /mnt/hdd/ncut_features/3d/csc
+coords_filename: coords.npy
+feats_filename: csc_feats.npy
 model: ???
 data:
   dataset:

@@ -110,13 +110,13 @@ def patch_wise_inference(cfg, device, model, img):
 def main(cfg: DictConfig):
     sys.path.append(hydra.utils.get_original_cwd())
     from utils.cuda_utils.raycast_image import Project2DFeaturesCUDA
-    from ncut.ncut_dataset import NcutScannetDataset
+    from ncut.ncut_datasets import FeatureExtractionScannet
     from ncut.visualize import visualize_3d_feats
 
     device = torch.device("cuda:0")
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_2d, device)
-    loader = NcutScannetDataset.dataloader_from_hydra(
+    loader = FeatureExtractionScannet.dataloader_from_hydra(
         cfg.ncut.feature_extraction_2d.data, only_first=False
     )
 
@@ -149,7 +149,7 @@ def main(cfg: DictConfig):
         voxel_coords = sample["mesh_voxel_coords"]
         n_points_full = voxel_coords.shape[0]
         mock_feats = np.zeros(shape=(n_points_full, 1))
-        sparse_tens = NcutScannetDataset.to_sparse_tens(
+        sparse_tens = FeatureExtractionScannet.to_sparse_tens(
             voxel_coords, mock_feats, device
         )  # just used to transform coords for projector
         batched_sparse_voxel_coords = sparse_tens.C

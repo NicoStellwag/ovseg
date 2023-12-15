@@ -40,13 +40,13 @@ def associate_features_to_original_coords(
 def main(cfg: DictConfig):
     # necessary for hydra object instantiation when script is not in project root
     sys.path.append(hydra.utils.get_original_cwd())
-    from ncut.ncut_dataset import NcutScannetDataset
+    from ncut.ncut_datasets import FeatureExtractionScannet
     from ncut.visualize import visualize_3d_feats
 
     device = torch.device("cuda:0")
 
     model = get_feature_extractor(cfg.ncut.feature_extraction_3d, device)
-    loader = NcutScannetDataset.dataloader_from_hydra(
+    loader = FeatureExtractionScannet.dataloader_from_hydra(
         cfg.ncut.feature_extraction_3d.data
     )
 
@@ -54,7 +54,7 @@ def main(cfg: DictConfig):
         sample = sample[0]
         vox_coords = sample["mesh_voxel_coords"]
         colors = sample["mesh_colors"]
-        x = NcutScannetDataset.to_sparse_tens(vox_coords, colors, device)
+        x = FeatureExtractionScannet.to_sparse_tens(vox_coords, colors, device)
 
         # model forward pass
         y_hat = model(x).detach()

@@ -8,6 +8,7 @@ import torch
 import MinkowskiEngine as ME
 from omegaconf import DictConfig
 import hydra
+import json
 
 from ncut.SensorData_python3_port import SensorData
 
@@ -56,9 +57,9 @@ def color_intrinsics_from_sensor_data(sens: SensorData):
     return sens.intrinsic_color
 
 
-class NcutScannetDataset(Dataset):
+class FeatureExtractionScannet(Dataset):
     """
-    Dataset helper for easy parallel loading.
+    Used for 2D or 3D feature extraction of scannet scenes.
     """
 
     def __init__(
@@ -160,14 +161,22 @@ class NcutScannetDataset(Dataset):
         if "color_images" in self.content:
             if self.scale_colors_to_depth_resolution:
                 sample["color_images"] = color_images_from_sensor_data(
-                    sensordata, image_size=(depth_h, depth_w), frame_skip=self.frame_skip
+                    sensordata,
+                    image_size=(depth_h, depth_w),
+                    frame_skip=self.frame_skip,
                 )
             else:
-                sample["color_images"] = color_images_from_sensor_data(sensordata, frame_skip=self.frame_skip)
+                sample["color_images"] = color_images_from_sensor_data(
+                    sensordata, frame_skip=self.frame_skip
+                )
         if "depth_images" in self.content:
-            sample["depth_images"] = depth_images_from_sensor_data(sensordata, frame_skip=self.frame_skip)
+            sample["depth_images"] = depth_images_from_sensor_data(
+                sensordata, frame_skip=self.frame_skip
+            )
         if "camera_poses" in self.content:
-            sample["camera_poses"] = poses_from_sensor_data(sensordata, frame_skip=self.frame_skip)
+            sample["camera_poses"] = poses_from_sensor_data(
+                sensordata, frame_skip=self.frame_skip
+            )
         if "color_intrinsics" in self.content:
             intr = color_intrinsics_from_sensor_data(sensordata)
             if self.scale_colors_to_depth_resolution:
@@ -207,6 +216,91 @@ class NcutScannetDataset(Dataset):
             datacfg.dataloader, dataset=ds, collate_fn=lambda x: x
         )
         assert loader.batch_size == 1, "batch size must be 1!"
+        if only_first:
+            return [next(iter(loader))]
+        return loader
+
+
+class NormalizedCutDataset(Dataset):
+    """
+    Used for creation of initial pseudo masks from
+    previously saved point-wise features.
+    """
+
+    def __init__(
+        self,
+        scannet_base_dir,
+        mode,
+        segments_base_dir,
+        base_dir_3d,
+        coords_filename_3d,
+        features_filename_3d,
+        base_dir_2d,
+        coords_filename_2d,
+        features_filename_2d,
+    ):
+        self.scannet_base_dir = scannet_base_dir
+        self.segments_base_dir = segments_base_dir
+        self.base_dir_3d = base_dir_3d
+        self.coords_filename_3d = coords_filename_3d
+        self.features_filename_3d = features_filename_3d
+        self.base_dir_2d = base_dir_2d
+        self.coords_filename_2d = coords_filename_2d
+        self.features_filename_2d = features_filename_2d
+
+        # read scenes from split file
+        assert mode in ["train", "val", "test"], "mode must be train, val, or test"
+        split_file = os.path.join(scannet_base_dir, "splits", f"scannetv2_{mode}.txt")
+        with open(split_file, "r") as sf:
+            self.scenes = [i.strip() for i in sf.readlines()]
+
+    def __len__(self):
+        return len(self.scenes)
+
+    def __getitem__(self, idx):
+        # load coords and feats from np files
+        coords = np.load(
+            os.path.join(self.base_dir_3d, self.scenes[idx], self.coords_filename_3d)
+        )
+        feats_3d = np.load(
+            os.path.join(self.base_dir_3d, self.scenes[idx], self.features_filename_3d)
+        )
+        feats_2d = np.load(
+            os.path.join(self.base_dir_2d, self.scenes[idx], self.features_filename_2d)
+        )
+
+        # load segments from json and convert to np
+        segments_filename = str(
+            next(iter(Path(self.segments_base_dir).glob(f"{self.scenes[idx]}*.json")))
+        )
+        with open(segments_filename, "r") as sf:
+            segments_file_dict = json.loads(sf.read())
+        segment_ids = np.asarray(segments_file_dict["segIndices"], dtype=int)
+        segment_connectivity = np.asarray(
+            segments_file_dict["segConnectivity"], dtype=int
+        )
+
+        return {
+            "coords": coords,  # (n_points, 3), float
+            "feats_3d": feats_3d,  # (n_points, dim_feats_3d), float
+            "feats_2d": feats_2d,  # (n_points, dim_feats_2d), float
+            "segment_ids": segment_ids,  # (n_points,), int
+            "segment_connectivity": segment_connectivity,  # (-1, 2), int (neighborhood edges of segments)
+        }
+
+    @staticmethod
+    def dataloader_from_hydra(datacfg: DictConfig, only_first=False):
+        """
+        datacfg must be hydra config of the following form:
+        If only_first is True, the dataloader's first batch will be returned.
+
+        dataset:
+          <config to instantiate this class>
+        dataloader:
+          <config to instantiate dataloader with batch size 1 (else will be overwritten!)>
+        """
+        ds = hydra.utils.instantiate(datacfg.dataset)
+        loader = hydra.utils.instantiate(datacfg.dataloader, dataset=ds)
         if only_first:
             return [next(iter(loader))]
         return loader

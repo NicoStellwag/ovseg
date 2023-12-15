@@ -1,2 +1,20 @@
 # @package _group_
-some_property: some value
+feature_extraction_2d: ???
+feature_extraction_3d: ???
+data:
+  dataset:
+    _target_: ncut.ncut_datasets.NormalizedCutDataset
+    scannet_base_dir: /mnt/hdd/scannet
+    mode: train
+    segments_base_dir: /mnt/hdd/scannet_segments
+    base_dir_3d: /mnt/hdd/ncut_features/3d/csc
+    coords_filename_3d: coords.npy
+    features_filename_3d: csc_feats.npy
+    base_dir_2d: /mnt/hdd/ncut_features/2d/lseg
+    coords_filename_2d: coords.npy
+    features_filename_2d: lseg_feats.npy
+  dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 1
+    # num_workers: 2
+    # persistent_workers: True

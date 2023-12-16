@@ -1,6 +1,43 @@
 import open3d as o3d
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
+import random
+import numpy as np
+
+
+def generate_random_color():
+    r = random.random()
+    g = random.random()
+    b = random.random()
+    return (r, g, b)
+
+
+def visualize_segments(coords, unique_segments, segment_ids, filename):
+    """
+    Visualize geometric oversegmentation of scene.
+    coords: np array (n_points, 3)
+    unique_segments: np array (n_segments_unique,)
+    segment_ids: np array (n_points,)
+    filename: where to save html
+    """
+    random.seed(123)
+    segment_colors = {s_id.item(): generate_random_color() for s_id in unique_segments}
+    segment_color_map = np.array([segment_colors[s_id.item()] for s_id in segment_ids])
+    visualize_3d_feats(coords, segment_color_map, filename)
+
+
+def visualize_instances(coords, pointwise_instances, filename):
+    """
+    Visualize instance segmentation of scene.
+    coords: np array (n_points, 3)
+    pointwise_instances: np array (n_points, n_instances) - one hots
+    filename: where to save html
+    """
+    random.seed(123)
+    n_instances = pointwise_instances.shape[1]
+    instance_colors = [generate_random_color() for _ in range(n_instances)]
+    instance_color_map = np.matmul(pointwise_instances, np.array(instance_colors))
+    visualize_3d_feats(coords, instance_color_map, filename)
 
 
 def visualize_3d_feats(coords, feats, save_path=None):

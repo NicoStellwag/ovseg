@@ -286,6 +286,7 @@ class NormalizedCutDataset(Dataset):
             "feats_2d": feats_2d,  # (n_points, dim_feats_2d), float
             "segment_ids": segment_ids,  # (n_points,), int
             "segment_connectivity": segment_connectivity,  # (-1, 2), int (neighborhood edges of segments)
+            "scene_name": self.scenes[idx], # str wrapped in list to make it batchable
         }
 
     @staticmethod

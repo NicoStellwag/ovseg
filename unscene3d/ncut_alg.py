@@ -673,11 +673,11 @@ def main(config):
 
 
         # Create output dir for images
-        if not os.path.exists(freemask_save_base):
-            os.makedirs(freemask_save_base)
+        if not os.path.exists(mask_save_base):
+            os.makedirs(mask_save_base)
 
         #Skip if already processed
-        if os.path.exists(f"{freemask_save_base}/{scene_name[0]}_cloud.npy"):
+        if os.path.exists(f"{mask_save_base}/{scene_name[0]}_cloud.npy"):
             print(f"Scene already processed: {scene_name[0]}")
             # print(f'Scene already processed: {scene_name[0]}, saving cloud data only')
             #

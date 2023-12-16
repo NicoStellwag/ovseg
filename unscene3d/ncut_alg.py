@@ -2,140 +2,31 @@ import glob
 import os
 import sys
 import hydra
-from hydra.utils import get_original_cwd, to_absolute_path
-os.chdir("/home/luebberstedt/ovseg")
-sys.path.append(os.getcwd())
-#print(os.getcwd())
-#print(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
-import logging
-from omegaconf import OmegaConf
+#os.chdir("/home/luebberstedt/ovseg")
+#sys.path.append(os.getcwd())
+
 from sklearn.decomposition import PCA
-from tqdm import tqdm
+
 import open3d as o3d
 import numpy as np
 from scipy.spatial import KDTree
-import matplotlib.pyplot as plt
 from scipy.linalg import eigh
 import torch.nn.functional as F
-import pyviz3d.visualizer as vis
-print(sys.path)
-os.environ["HYDRA_FULL_ERROR"] = "1"
-from datasets import load_dataset
-from lib.dataset import initialize_data_loader
-from models import load_model
-#from models.encoders_2d import load_2d_model
-from utils.cuda_utils.raycast_image import Project2DFeaturesCUDA
-from lib.utils import load_state_with_same_shape
-#from utils.freemask_utils import *
 
-from torch.nn.functional import cosine_similarity
+os.environ["HYDRA_FULL_ERROR"] = "1"
+from utils.cuda_utils.raycast_image import Project2DFeaturesCUDA
+
 from MinkowskiEngine import SparseTensor
+import pyviz3d.visualizer as vis
 
 import torch.multiprocessing
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
-
-import torch.nn as nn
-from omegaconf import DictConfig
-
 # Define hyperparameters here
 max_number_of_instances = 20
 eps = 1e-5
 visualize = True
-
-def get_labels(dataset):
-    labels = []
-    if(dataset in ['scannet']):
-        path = '/mnt/hdd/scannet/scannetv2-labels.combined.tsv'
-        assert os.path.exists(path), '*** Error : {} not exist !!!'.format(path)
-        f = open(path, 'r') 
-        lines = f.readlines()      
-        for line in lines: 
-            label = line.split("\t")[1]#.strip().split(',')[-1].split(';')[0]
-            labels.append(label)
-        f.close()
-        labels = labels[1:]
-        return labels
-def get_feature_extractor(cfg_fe2d: DictConfig, device) -> nn.Module:
-    """
-    Instantiates a minkowski resunet and loads pretrained weights.
-    """
-    labels = get_labels("scannet")
-    cfg_fe2d.model.labels = labels
-    cfg_fe2d.model._target_ = ".ncut.feature_extraction_2d." + cfg_fe2d.model._target_
-    model = hydra.utils.instantiate(cfg_fe2d.model, _convert_="all")
-    if cfg_fe2d.model.get("weights_path", None):
-        if cfg_fe2d.model.weights_type == "state_dict":
-            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path))
-        elif cfg_fe2d.model.weights_type == "checkpoint":
-            model.load_state_dict(torch.load(cfg_fe2d.model.weights_path)["state_dict"])
-    return model.eval().to(device)
-
-def initialize_models(config, device):
-    logging.info("===> Configurations")
-    logging.info(OmegaConf.to_yaml(config))
-
-    # Dataloader
-    logging.info("===> Initializing dataloader")
-    DatasetClass = load_dataset(config.data.datasets)
-    data_loader = initialize_data_loader(
-        DatasetClass,
-        config=config,
-        phase=config.train.train_phase,
-        num_workers=config.data.num_workers,
-        augment_data=False,
-        shuffle=False,
-        repeat=False,
-        batch_size=1,
-        #limit_numpoints=1000,
-    )
-    dataset = data_loader.dataset  # type: lib.datasets.scannet.ScanNet_2cmDataset
-
-    #return None, data_loader, dataset
-    if config.image_data.use_images:
-        # 2D model initialization
-        logging.info("===> Building 2D model")
-        #ImageEncoderClass = load_2d_model(config.image_data.model)
-        #model_2d = ImageEncoderClass(config, data_loader.dataset).eval().to(device)
-        model_2d = get_feature_extractor(config.ncut.feature_extraction_2d, device)
-        #model_2d = hydra.utils.instantiate(cfg_fe2d.model, _convert_="all")
-
-
-    model = model_2d
-    return model, data_loader, dataset
-    #todo: load csc features
-    
-    
-    #no 3d model needed
-    logging.info("===> Building 3D model")
-    num_in_channel = config.net.num_in_channels
-    num_labels = data_loader.dataset.NUM_LABELS
-    NetClass = load_model(config.net.model)
-    model_3d = NetClass(num_in_channel, num_labels, config).eval().to(device)
-    
-    model_3d = get_feature_extractor(config.ncut.feature_extraction_3d, device)
-
-    # Load pretrained weights into model
-    print("===> Loading weights for 3D backbone: " + config.net.weights_for_inner_model)
-    state = torch.load(config.net.weights_for_inner_model)
-    matched_weights = load_state_with_same_shape(model_3d, state["state_dict"])
-    model_dict = model_3d.state_dict()
-    model_dict.update(matched_weights)
-    model_3d.load_state_dict(model_dict)
-    
-    # Pick which modality to use
-    if config.freemask.modality == "color":
-        model = model_2d
-    elif config.freemask.modality == "geom":
-        model = model_3d
-    elif config.freemask.modality == "both":
-        model = (model_2d, model_3d)
-    else:
-        raise ValueError("Unknown modality")
-
-    return model, data_loader, dataset
-
 
 def normalize_mat(A, eps=1e-5):
     A -= np.min(A[np.nonzero(A)]) if np.any(A > 0) else 0
@@ -605,7 +496,7 @@ def maskcut3d(
 
         # get salient area
         bipartition = get_salient_areas(second_smallest_vec)
-        print(np.unique(bipartition,return_counts=True))
+        #print(np.unique(bipartition,return_counts=True))
 
         # Get foreground points
         fg_coords = np.zeros((0, 3))
@@ -659,11 +550,11 @@ def maskcut3d(
             set.intersection(separated_seed_partition, foreground_segments)
         ) / len(separated_seed_partition)
         if IoU > 0.5:
-            # print(f'Skipped current mask with high IoU score of {IoU}')
+            #print(f'Skipped current mask with high IoU score of {IoU}')
             current_mask = separated_seed_pseudo_mask
             continue
         if len(separated_seed_partition) < min_segment_size:
-            # print(f'Skipped current mask with too small size {len(separated_seed_partition)}')
+            #print(f'Skipped current mask with too small size {len(separated_seed_partition)}')
             current_mask = separated_seed_pseudo_mask
             continue
 
@@ -713,59 +604,30 @@ def maskcut3d(
 
 def segment_scene(
     coords,
-    feats,
-    batch,
-    model,
+    feats_2d,
+    feats_3d,
     config,
-    dataset,
     segment_ids,
     seg_connectivity,
-    visualize=False,
-    filter_large_segments=False,
+    scene_colors
 ):
-    # Encode pretrained features
-    if isinstance(model, tuple):
-        # Get both encoded features and projected features (2d model should be first in tuple)
-        encoded_features = (
-            encode_scene_feats(
-                batch, model[0], config, dataset, use_image_data=True, whiten=False
-            ),
-            encode_scene_feats(
-                batch, model[1], config, dataset, use_image_data=False, whiten=False
-            ),
-        )
-    else:
-        encoded_features = encode_scene_feats(
-            batch,
-            model,
-            config,
-            dataset,
-            use_image_data=config.image_data.use_images,
-            whiten=False,
-        )
-
+    
     # Aggregate features
-    if not isinstance(encoded_features, tuple):
-        aggregated_features, unique_segments = aggregate_features(
-            encoded_features, segment_ids, seg_connectivity, config
-        )
-    else:
-        aggregated_key_features, unique_segments = aggregate_features(
-            encoded_features[0], segment_ids, seg_connectivity, config
-        )
-        aggregated_query_features, unique_segments = aggregate_features(
-            encoded_features[1], segment_ids, seg_connectivity, config
-        )
-        aggregated_features = (aggregated_key_features, aggregated_query_features)
-
+    aggregated_feats_2d, unique_segments = aggregate_features(
+            feats_2d, segment_ids, seg_connectivity, config
+    )
+    aggregated_feats_3d, unique_segments = aggregate_features(
+            feats_3d, segment_ids, seg_connectivity, config
+    )
+    aggregated_features = (aggregated_feats_2d,aggregated_feats_3d)
     # Start the iterative NCut algorithm
     bipartitions = maskcut3d(
         aggregated_features,
         unique_segments,
         seg_connectivity,
         segment_ids,
-        coords[:, 1:],
-        feats,
+        coords,
+        scene_colors
         # affinity_tau=config.freemask.affinity_tau,
         # max_number_of_instances=max_number_of_instances,
         # similarity_metric=config.freemask.similarity_metric,
@@ -775,47 +637,46 @@ def segment_scene(
     )
 
     return bipartitions, aggregated_features
-
+import json
 @hydra.main(config_path="../conf", config_name="config_base_instance_segmentation.yaml")
 def main(config):
     device = "cuda"
-    model, data_loader, dataset = initialize_models(config, device)
 
-    freemask_save_base = "outputs/" if "save_dir" not in config else config.save_dir
+    mask_save_base = "/mnt/hdd/ncut_masks/"
 
     # Start main iteration over the dataset
-    tqdm_loader = tqdm(data_loader)
-    for batch_id, batch in enumerate(tqdm_loader):
-        (
-            coords,
-            feats,
-            target,
-            #instances,#####isdict, but cant convert dict to tensor
-            scene_name,
-            img,
-            camera_poses,
-            color_intrinsics,
-            segment_ids,
-            seg_connectivity,
-            *transform,
-        ) = batch
-        coords, feats, target, segment_ids, seg_connectivity = (
-            coords.to(device),
-            feats.to(device),
-            target.to(device),
-            segment_ids[0].to(device),
-            torch.from_numpy(
-                seg_connectivity[0]#[config.freemask.segment_dimension_order]
-            )
-            .long()
-            .to(device),
-        )
+    for scene_name in os.listdir("/mnt/hdd/ncut_features/2d/lseg/"):
+    
+        coords_2d = np.load("/mnt/hdd/ncut_features/2d/lseg/" + scene_name + "/coords.npy")
+        feats_2d = np.load("/mnt/hdd/ncut_features/2d/lseg/" + scene_name + "/lseg_feats.npy")
+        coords_3d = np.load("/mnt/hdd/ncut_features/3d/csc/" + scene_name + "/coords.npy")
+        feats_3d = np.load("/mnt/hdd/ncut_features/3d/csc/" + scene_name + "/csc_feats.npy")
+        result = np.array_equal(coords_2d, coords_3d)
+        assert(result==True,"coords_2d and coords_3d not equal")
+
+        f = open("/mnt/hdd/scannet_test_segments/" + scene_name + "_vh_clean_2.0.005000.segs.json")
+        data = json.load(f)
+        segment_ids = np.array(data["segIndices"],dtype=np.int32)
+        seg_connectivity = np.array(data["segConnectivity"],dtype=np.int32)
+        f.close
+        
+        # Instantiate PCA and fit-transform the data
+        pca = PCA(n_components=3)
+        feats = pca.fit_transform(feats_2d)
+
+        coords = torch.tensor(coords_2d,device=device)
+        feats_2d = torch.tensor(feats_2d,device=device)
+        feats_3d = torch.tensor(feats_3d,device=device)
+        segment_ids = torch.tensor(segment_ids,device=device)
+        seg_connectivity = torch.tensor(seg_connectivity,device=device)   
+        feats = torch.tensor(feats,device=device)   
+
 
         # Create output dir for images
         if not os.path.exists(freemask_save_base):
             os.makedirs(freemask_save_base)
 
-        # Skip if already processed
+        #Skip if already processed
         if os.path.exists(f"{freemask_save_base}/{scene_name[0]}_cloud.npy"):
             print(f"Scene already processed: {scene_name[0]}")
             # print(f'Scene already processed: {scene_name[0]}, saving cloud data only')
@@ -832,17 +693,12 @@ def main(config):
             #
             # all_cloud_save = np.concatenate((full_res_coords, full_res_feats, full_res_labels[:, None], full_res_instance_ids[:, None], full_res_segment_ids[:, None]), axis=1).astype(np.single)
             # np.save(f'{freemask_save_base}/{scene_name[0]}_cloud.npy', all_cloud_save)
-            continue
+        #     continue
 
         orig_pcd = o3d.geometry.PointCloud()
-        orig_pcd.points = o3d.utility.Vector3dVector(coords[:, 1:].cpu().numpy())
+        orig_pcd.points = o3d.utility.Vector3dVector(coords.cpu().numpy())
         orig_pcd.colors = o3d.utility.Vector3dVector(feats.cpu().numpy() + 0.5)
         orig_pcd.estimate_normals()
-        shift = [
-            (coords[:, 1].max() - coords[:, 1].min()).cpu().numpy() * 1.2,
-            0.0,
-            0.0,
-        ]
 
         segment_colors = (
             torch.stack(
@@ -856,28 +712,32 @@ def main(config):
         )
         segment_pcd = o3d.geometry.PointCloud()
         segment_pcd.points = o3d.utility.Vector3dVector(
-            coords[:, 1:].cpu().numpy() + shift
+            coords.cpu().numpy()
         )
         segment_pcd.colors = o3d.utility.Vector3dVector(
             segment_colors.cpu().numpy() / 255.0
         )
 
-        orig_coords = coords[:, 1:].cpu().numpy() * dataset.VOXEL_SIZE
+        orig_coords = coords.cpu().numpy() * 0.02
         orig_colors = (feats.cpu().numpy() + 0.5) * 255.0
         orig_normals = np.array(orig_pcd.normals)
 
         # Run the iterative cut and mask algorithm
         bipartitions, aggregated_features = segment_scene(
             coords,
-            feats,
-            batch,
-            model,
+            feats_2d,
+            feats_3d,
             config,
-            dataset,
             segment_ids,
             seg_connectivity,
-            visualize=False,
+            feats
         )
+    # bipartitions = bipartitions.transpose()
+
+        import numpy as np  
+        #a  = np.array([[0,1,0,0],[1,0,0,0],[0,0,0,1]])
+        print(bipartitions)
+        print('np.argmax(a, axis=1): {0}'.format(np.argmax(bipartitions, axis=1)))
 
         # Calculate inverse segment mapping
         unique_segments = segment_ids.unique()
@@ -893,13 +753,13 @@ def main(config):
 
         # Visualize the final bipartitions
         if config.test.visualize:
-            instance_colors = np.zeros(coords[:, 1:].shape)
+            instance_colors = np.zeros(coords.shape)
             for i in reversed(range(num_instances)):
                 instance_colors[bipartitions[:, i]] = np.random.rand(3)
 
             instance_pcd = o3d.geometry.PointCloud()
             instance_pcd.points = o3d.utility.Vector3dVector(
-                coords[:, 1:].cpu().numpy() + shift
+                coords.cpu().numpy()
             )
             instance_pcd.colors = o3d.utility.Vector3dVector(instance_colors)
 
@@ -955,7 +815,7 @@ def main(config):
                 point_size=50,
             )
 
-            v.save(f"{freemask_save_base}/../visualize/{scene_name[0]}")
+            #v.save(f"{freemask_save_base}/../visualize/{scene_name[0]}")
 
             # o3d.visualization.draw_geometries([instance_pcd, orig_pcd])
 
@@ -972,10 +832,10 @@ def main(config):
 
         # Associate order of points
         small_res_tree = KDTree(
-            coords[:, 1:].cpu().numpy() + 0.5
+            coords.cpu().numpy() + 0.5
         )  # for rounding shift at 2cm resolution the rounding shift was 1 voxel size
         _, lr_hr_matches = small_res_tree.query(
-            full_res_coords / dataset.VOXEL_SIZE, k=1
+            full_res_coords / 0.02, k=1
         )
 
         full_res_segment_ids = segment_ids.cpu().numpy()[lr_hr_matches]
@@ -994,8 +854,8 @@ def main(config):
         all_cloud_save = full_res_coords.astype(
             np.single
         )  # np.concatenate((full_res_coords, full_res_feats, full_res_labels[:, None], full_res_instance_ids[:, None], full_res_segment_ids[:, None]), axis=1).astype(np.single)
-        np.save(f"{freemask_save_base}/{scene_name[0]}_cloud.npy", all_cloud_save)
-        np.save(f"{freemask_save_base}/{scene_name[0]}_masks.npy", all_masks_save)
+        np.save(f"{mask_save_base}/{scene_name[0]}_cloud.npy", all_cloud_save)
+        np.save(f"{mask_save_base}/{scene_name[0]}_masks.npy", all_masks_save)
 
 
 if __name__ == "__main__":

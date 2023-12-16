@@ -732,12 +732,7 @@ def main(config):
             seg_connectivity,
             feats
         )
-    # bipartitions = bipartitions.transpose()
-
-        import numpy as np  
-        #a  = np.array([[0,1,0,0],[1,0,0,0],[0,0,0,1]])
-        print(bipartitions)
-        print('np.argmax(a, axis=1): {0}'.format(np.argmax(bipartitions, axis=1)))
+    
 
         # Calculate inverse segment mapping
         unique_segments = segment_ids.unique()

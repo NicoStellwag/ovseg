@@ -1,38 +1,35 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# 
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-
-#from lib.datasets import synthia
-#from datasets import stanford 
-from datasets import scannet
-#from lib.datasets import shapenet
+import datasets.freemask_semseg as freemask_semseg
+import datasets.outdoor_semseg as outdoor_semseg
+import datasets.scannet2d3d as scannet2d3d
+import datasets.semseg as semseg
 
 DATASETS = []
 
 
-def add_datasets(module):
-  DATASETS.extend([getattr(module, a) for a in dir(module) if 'Dataset' in a])
+def add_dataset(module):
+    DATASETS.extend([getattr(module, a) for a in dir(module) if "Dataset" in a])
 
+add_dataset(freemask_semseg)
+add_dataset(outdoor_semseg)
+add_dataset(scannet2d3d)
+add_dataset(semseg)
 
-#add_datasets(stanford)
-#add_datasets(synthia)
-add_datasets(scannet)
-#add_datasets(shapenet)
+def get_datasets():
+    """Returns a tuple of sample datasets."""
+    return DATASETS
+
 
 def load_dataset(name):
-  '''Creates and returns an instance of the datasets given its name.
-  '''
-  # Find the model class from its name
-  mdict = {dataset.__name__: dataset for dataset in DATASETS}
-  print(mdict)
-  if name not in mdict:
-    print('Invalid dataset index. Options are:')
-    # Display a list of valid dataset names
-    for dataset in DATASETS:
-      print('\t* {}'.format(dataset.__name__))
-    raise ValueError(f'Dataset {name} not defined')
-  DatasetClass = mdict[name]
-  print(DatasetClass)
-  return DatasetClass
+    """Creates and returns an instance of the dataset given its class name."""
+    # Find the model class from its name
+    all_datasets = get_datasets()
+    dsdict = {ds.__name__: ds for ds in all_datasets}
+    if name not in dsdict:
+        print("Invalid model index. Options are:")
+        # Display a list of valid model names
+        for ds in all_datasets:
+            print(f"\t* {ds.__name__}")
+        return None
+    DSClass = dsdict[name]
+
+    return DSClass

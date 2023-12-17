@@ -16,7 +16,7 @@ gauss_scale: 1.0
 hlevels: [0,1,2,3]
 
 # queries
-non_parametric_queries: true
+non_parametric_queries: false
 random_query_both: false
 random_normal: false
 random_queries: false

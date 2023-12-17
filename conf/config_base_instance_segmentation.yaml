@@ -1,7 +1,7 @@
 general:
   train_mode: true
   task: "instance_segmentation"
-  seed: null
+  seed: 42
   checkpoint: null
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer
@@ -15,9 +15,9 @@ general:
   export: false
   use_dbscan: false
   ignore_class_threshold: 100
-  project_name: scannet
-  workspace: jonasschult
-  experiment_name: DEBUG_ABLATION
+  project_name: ovseg
+  workspace: ovseg
+  experiment_name: ???
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95
@@ -54,7 +54,7 @@ general:
 defaults:
   - data: indoor
   - data/data_loaders: simple_loader
-  - data/datasets: scannet
+  - data/datasets: openvocab_scannet200
   - data/collation_functions: voxelize_collate
   - logging: full
   - model: mask3d

@@ -28,13 +28,14 @@ from datasets.scannet200.scannet200_constants import (
 logger = logging.getLogger(__name__)
 
 
-class SemanticSegmentationDataset(Dataset):
+class OpenVocabSemanticSegmentationDataset(Dataset):
     """Docstring for SemanticSegmentationDataset."""
 
     def __init__(
         self,
         dataset_name="scannet",
         data_dir: Optional[Union[str, Tuple[str]]] = "data/processed/scannet",
+        ground_truth_dir: str = "/mnt/hdd/self_training_initial",
         label_db_filepath: Optional[
             str
         ] = "configs/scannet_preprocessing/label_database.yaml",
@@ -110,7 +111,7 @@ class SemanticSegmentationDataset(Dataset):
                 13: [60, 130, 60],  # Clutter
                 14: [130, 30, 60],
             }  # Fence
-        elif self.dataset_name == "scannet200":
+        elif self.dataset_name == "scannet200" or self.dataset_name == "openvocab_scannet200":
             self.color_map = SCANNET_COLOR_MAP_200
         elif self.dataset_name == "s3dis":
             self.color_map = {
@@ -692,8 +693,8 @@ class SemanticSegmentationDataset(Dataset):
     @staticmethod
     def _load_yaml(filepath):
         with open(filepath) as f:
-            # file = yaml.load(f, Loader=Loader)
             file = yaml.safe_load(f)
+            # file = yaml.load(f)
         return file
 
     def _select_correct_labels(self, labels, num_labels):

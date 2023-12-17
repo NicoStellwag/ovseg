@@ -3,23 +3,27 @@ import numpy as np
 import torch
 from random import random
 
+
 class VoxelizeCollate:
     def __init__(
-            self,
-            ignore_label=255,
-            voxel_size=1,
-            mode="test",
-            small_crops=False,
-            very_small_crops=False,
-            batch_instance=False,
-            probing=False,
-            task="instance_segmentation",
-            ignore_class_threshold=100,
-            filter_out_classes=[],
-            label_offset=0,
-            num_queries=None
+        self,
+        ignore_label=255,
+        voxel_size=1,
+        mode="test",
+        small_crops=False,
+        very_small_crops=False,
+        batch_instance=False,
+        probing=False,
+        task="instance_segmentation",
+        ignore_class_threshold=100,
+        filter_out_classes=[],
+        label_offset=0,
+        num_queries=None,
     ):
-        assert task in ["instance_segmentation", "semantic_segmentation"], "task not known"
+        assert task in [
+            "instance_segmentation",
+            "semantic_segmentation",
+        ], "task not known"
         self.task = task
         self.filter_out_classes = filter_out_classes
         self.label_offset = label_offset
@@ -35,34 +39,47 @@ class VoxelizeCollate:
         self.num_queries = num_queries
 
     def __call__(self, batch):
-        if ("train" in self.mode) and (self.small_crops or self.very_small_crops):
+        if ("train" in self.mode) and (
+            self.small_crops or self.very_small_crops
+        ):
             batch = make_crops(batch)
         if ("train" in self.mode) and self.very_small_crops:
             batch = make_crops(batch)
-        return voxelize(batch, self.ignore_label, self.voxel_size, self.probing, self.mode,
-                        task=self.task, ignore_class_threshold=self.ignore_class_threshold,
-                        filter_out_classes=self.filter_out_classes, label_offset=self.label_offset,
-                        num_queries=self.num_queries)
+        return voxelize(
+            batch,
+            self.ignore_label,
+            self.voxel_size,
+            self.probing,
+            self.mode,
+            task=self.task,
+            ignore_class_threshold=self.ignore_class_threshold,
+            filter_out_classes=self.filter_out_classes,
+            label_offset=self.label_offset,
+            num_queries=self.num_queries,
+        )
 
 
 class VoxelizeCollateMerge:
     def __init__(
-            self,
-            ignore_label=255,
-            voxel_size=1,
-            mode="test",
-            scenes=2,
-            small_crops=False,
-            very_small_crops=False,
-            batch_instance=False,
-            make_one_pc_noise=False,
-            place_nearby=False,
-            place_far=False,
-            proba=1,
-            probing=False,
-            task="instance_segmentation"
+        self,
+        ignore_label=255,
+        voxel_size=1,
+        mode="test",
+        scenes=2,
+        small_crops=False,
+        very_small_crops=False,
+        batch_instance=False,
+        make_one_pc_noise=False,
+        place_nearby=False,
+        place_far=False,
+        proba=1,
+        probing=False,
+        task="instance_segmentation",
     ):
-        assert task in ["instance_segmentation", "semantic_segmentation"], "task not known"
+        assert task in [
+            "instance_segmentation",
+            "semantic_segmentation",
+        ], "task not known"
         self.task = task
         self.mode = mode
         self.scenes = scenes
@@ -79,9 +96,9 @@ class VoxelizeCollateMerge:
 
     def __call__(self, batch):
         if (
-                ("train" in self.mode)
-                and (not self.make_one_pc_noise)
-                and (self.proba > random())
+            ("train" in self.mode)
+            and (not self.make_one_pc_noise)
+            and (self.proba > random())
         ):
             if self.small_crops or self.very_small_crops:
                 batch = make_crops(batch)
@@ -109,19 +126,28 @@ class VoxelizeCollateMerge:
                     if j == 0:
                         batch_filenames = batch[i + j][3]
                     else:
-                        batch_filenames = batch_filenames + f"+{batch[i + j][3]}"
+                        batch_filenames = (
+                            batch_filenames + f"+{batch[i + j][3]}"
+                        )
 
                     batch_raw_color.append(batch[i + j][4])
                     batch_raw_normals.append(batch[i + j][5])
 
                     # make instance ids and segment ids unique
                     # take care that -1 instances stay at -1
-                    batch_labels.append(batch[i + j][2] + [0, offset_instance_id, offset_segment_id])
+                    batch_labels.append(
+                        batch[i + j][2]
+                        + [0, offset_instance_id, offset_segment_id]
+                    )
                     batch_labels[-1][batch[i + j][2][:, 1] == -1, 1] = -1
 
-                    max_instance_id, max_segment_id = batch[i + j][2].max(axis=0)[1:]
+                    max_instance_id, max_segment_id = batch[i + j][2].max(
+                        axis=0
+                    )[1:]
                     offset_segment_id = offset_segment_id + max_segment_id + 1
-                    offset_instance_id = offset_instance_id + max_instance_id + 1
+                    offset_instance_id = (
+                        offset_instance_id + max_instance_id + 1
+                    )
 
                 if (len(batch_coordinates) == 2) and self.place_nearby:
                     border = batch_coordinates[0][:, 0].max()
@@ -129,7 +155,7 @@ class VoxelizeCollateMerge:
                     batch_coordinates[1][:, 0] += border
                 elif (len(batch_coordinates) == 2) and self.place_far:
                     batch_coordinates[1] += (
-                            np.random.uniform((-10, -10, -10), (10, 10, 10)) * 200
+                        np.random.uniform((-10, -10, -10), (10, 10, 10)) * 200
                     )
                 new_batch.append(
                     (
@@ -138,7 +164,7 @@ class VoxelizeCollateMerge:
                         np.concatenate(batch_labels),
                         batch_filenames,
                         np.vstack(batch_raw_color),
-                        np.vstack(batch_raw_normals)
+                        np.vstack(batch_raw_normals),
                     )
                 )
             # TODO WHAT ABOUT POINT2SEGMENT AND SO ON ...
@@ -154,7 +180,9 @@ class VoxelizeCollateMerge:
                             np.concatenate(
                                 (
                                     batch[i][2],
-                                    np.full_like(batch[i + 1][2], self.ignore_label),
+                                    np.full_like(
+                                        batch[i + 1][2], self.ignore_label
+                                    ),
                                 )
                             ),
                         ]
@@ -165,7 +193,9 @@ class VoxelizeCollateMerge:
                             np.vstack((batch[i][1], batch[i + 1][1])),
                             np.concatenate(
                                 (
-                                    np.full_like(batch[i][2], self.ignore_label),
+                                    np.full_like(
+                                        batch[i][2], self.ignore_label
+                                    ),
                                     batch[i + 1][2],
                                 )
                             ),
@@ -175,48 +205,15 @@ class VoxelizeCollateMerge:
                     new_batch.append([batch[i][0], batch[i][1], batch[i][2]])
             batch = new_batch
         # return voxelize(batch, self.ignore_label, self.voxel_size, self.probing, self.mode)
-        return voxelize(batch, self.ignore_label, self.voxel_size, self.probing, self.mode, task=self.task)
+        return voxelize(
+            batch,
+            self.ignore_label,
+            self.voxel_size,
+            self.probing,
+            self.mode,
+            task=self.task,
+        )
 
-# Implementation similar to VoxelizeCollateMerge, but having masks instead of labels as input data
-class FreeMaskVoxelizeCollate:
-    def __init__(
-            self,
-            ignore_label=255,
-            voxel_size=1,
-            mode="test",
-            small_crops=False,
-            very_small_crops=False,
-            batch_instance=False,
-            probing=False,
-            task="instance_segmentation",
-            ignore_class_threshold=100,
-            filter_out_classes=[],
-            label_offset=0,
-            num_queries=None
-    ):
-        assert task in ["instance_segmentation"], "task not known"
-        self.task = task
-        self.filter_out_classes = filter_out_classes
-        self.label_offset = label_offset
-        self.voxel_size = voxel_size
-        self.ignore_label = ignore_label
-        self.mode = mode
-        self.batch_instance = batch_instance
-        self.small_crops = small_crops
-        self.very_small_crops = very_small_crops
-        self.probing = probing
-        self.ignore_class_threshold = ignore_class_threshold
-
-        self.num_queries = num_queries
-
-    def __call__(self, batch):
-        if ("train" in self.mode) and (self.small_crops or self.very_small_crops):
-            batch = make_crops(batch)
-        if ("train" in self.mode) and self.very_small_crops:
-            batch = make_crops(batch)
-
-        # coordinates, features, labels, self.data[idx]['raw_filepath'].split("/")[-2], raw_color, raw_normals, raw_coordinates, idx = batch
-        return freemask_voxelize(batch, self.ignore_label, self.voxel_size, self.mode, ignore_class_threshold=self.ignore_class_threshold)
 
 def batch_instances(batch):
     new_batch = []
@@ -232,22 +229,32 @@ def batch_instances(batch):
     return new_batch
 
 
-def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
-             ignore_class_threshold, filter_out_classes, label_offset, num_queries):
-    (coordinates, features, labels, original_labels, inverse_maps, original_colors, original_normals,
-     original_coordinates, idx) = (
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        []
-    )
+def voxelize(
+    batch,
+    ignore_label,
+    voxel_size,
+    probing,
+    mode,
+    task,
+    ignore_class_threshold,
+    filter_out_classes,
+    label_offset,
+    num_queries,
+):
+    (
+        coordinates,
+        features,
+        labels,
+        original_labels,
+        inverse_maps,
+        original_colors,
+        original_normals,
+        original_coordinates,
+        idx,
+    ) = ([], [], [], [], [], [], [], [], [])
     voxelization_dict = {
         "ignore_label": ignore_label,
+        # "quantization_size": self.voxel_size,
         "return_index": True,
         "return_inverse": True,
     }
@@ -263,11 +270,18 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
         original_normals.append(sample[5])
 
         coords = np.floor(sample[0] / voxel_size)
-        voxelization_dict.update({"coordinates": torch.from_numpy(coords).to("cpu").contiguous(), "features": sample[1]})
+        voxelization_dict.update(
+            {
+                "coordinates": torch.from_numpy(coords).to("cpu").contiguous(),
+                "features": sample[1],
+            }
+        )
 
         # maybe this change (_, _, ...) is not necessary and we can directly get out
         # the sample coordinates?
-        _, _, unique_map, inverse_map = ME.utils.sparse_quantize(**voxelization_dict)
+        _, _, unique_map, inverse_map = ME.utils.sparse_quantize(
+            **voxelization_dict
+        )
         inverse_maps.append(inverse_map)
 
         sample_coordinates = coords[unique_map]
@@ -289,23 +303,39 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
 
     if probing:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, ),
+            NoGpu(
+                coordinates,
+                features,
+                original_labels,
+                inverse_maps,
+            ),
             labels,
         )
 
     if mode == "test":
         for i in range(len(input_dict["labels"])):
-            _, ret_index, ret_inv = np.unique(input_dict["labels"][i][:, 0], return_index=True, return_inverse=True)
+            _, ret_index, ret_inv = np.unique(
+                input_dict["labels"][i][:, 0],
+                return_index=True,
+                return_inverse=True,
+            )
             input_dict["labels"][i][:, 0] = torch.from_numpy(ret_inv)
+            # input_dict["segment2label"].append(input_dict["labels"][i][ret_index][:, :-1])
     else:
         input_dict["segment2label"] = []
 
         if "labels" in input_dict:
             for i in range(len(input_dict["labels"])):
                 # TODO BIGGER CHANGE CHECK!!!
-                _, ret_index, ret_inv = np.unique(input_dict["labels"][i][:, -1], return_index=True, return_inverse=True)
+                _, ret_index, ret_inv = np.unique(
+                    input_dict["labels"][i][:, -1],
+                    return_index=True,
+                    return_inverse=True,
+                )
                 input_dict["labels"][i][:, -1] = torch.from_numpy(ret_inv)
-                input_dict["segment2label"].append(input_dict["labels"][i][ret_index][:, :-1])  # [label, instance_id]
+                input_dict["segment2label"].append(
+                    input_dict["labels"][i][ret_index][:, :-1]
+                )
 
     if "labels" in input_dict:
         list_labels = input_dict["labels"]
@@ -319,36 +349,49 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
                 if 255 in label_ids:
                     label_ids = label_ids[:-1]
 
-                target.append({
-                    'labels': label_ids,
-                    'masks': list_labels[batch_id] == label_ids.unsqueeze(1)
-                })
+                target.append(
+                    {
+                        "labels": label_ids,
+                        "masks": list_labels[batch_id]
+                        == label_ids.unsqueeze(1),
+                    }
+                )
         else:
             if mode == "test":
                 for i in range(len(input_dict["labels"])):
-                    target.append({
-                        "point2segment": input_dict["labels"][i][:, 0]
-                    })
-                    target_full.append({
-                        "point2segment": torch.from_numpy(original_labels[i][:, 0]).long()
-                    })
-            else:  # training or validation make targets
-                target = get_instance_masks(list_labels,
-                                            list_segments=input_dict["segment2label"],
-                                            task=task,
-                                            ignore_class_threshold=ignore_class_threshold,
-                                            filter_out_classes=filter_out_classes,
-                                            label_offset=label_offset)
-                for i in range(len(target)):  # add the segment ids independent from labels
+                    target.append(
+                        {"point2segment": input_dict["labels"][i][:, 0]}
+                    )
+                    target_full.append(
+                        {
+                            "point2segment": torch.from_numpy(
+                                original_labels[i][:, 0]
+                            ).long()
+                        }
+                    )
+            else:
+                target = get_instance_masks(
+                    list_labels,
+                    list_segments=input_dict["segment2label"],
+                    task=task,
+                    ignore_class_threshold=ignore_class_threshold,
+                    filter_out_classes=filter_out_classes,
+                    label_offset=label_offset,
+                )
+                for i in range(len(target)):
                     target[i]["point2segment"] = input_dict["labels"][i][:, 2]
-                if "train" not in mode:  # do the same sing for the full resolution input data
-                    target_full = get_instance_masks([torch.from_numpy(l) for l in original_labels],
-                                                     task=task,
-                                                     ignore_class_threshold=ignore_class_threshold,
-                                                     filter_out_classes=filter_out_classes,
-                                                     label_offset=label_offset)
+                if "train" not in mode:
+                    target_full = get_instance_masks(
+                        [torch.from_numpy(l) for l in original_labels],
+                        task=task,
+                        ignore_class_threshold=ignore_class_threshold,
+                        filter_out_classes=filter_out_classes,
+                        label_offset=label_offset,
+                    )
                     for i in range(len(target_full)):
-                        target_full[i]["point2segment"] = torch.from_numpy(original_labels[i][:, 2]).long()
+                        target_full[i]["point2segment"] = torch.from_numpy(
+                            original_labels[i][:, 2]
+                        ).long()
     else:
         target = []
         target_full = []
@@ -357,177 +400,43 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
 
     if "train" not in mode:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords,
-                  target_full, original_colors, original_normals, original_coordinates, idx), target,
-            [sample[3] for sample in batch]
+            NoGpu(
+                coordinates,
+                features,
+                original_labels,
+                inverse_maps,
+                full_res_coords,
+                target_full,
+                original_colors,
+                original_normals,
+                original_coordinates,
+                idx,
+            ),
+            target,
+            [sample[3] for sample in batch],
         )
     else:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords), target,
-            [sample[3] for sample in batch]
+            NoGpu(
+                coordinates,
+                features,
+                original_labels,
+                inverse_maps,
+                full_res_coords,
+            ),
+            target,
+            [sample[3] for sample in batch],
         )
 
-def freemask_voxelize(batch, ignore_label, voxel_size, mode, ignore_class_threshold):
-    # Freemasks are actually (labels, ..., segment_ids)
-    (coordinates, features, freemasks, original_freemasks, inverse_maps, original_colors, original_normals,
-     original_coordinates, idx, segment_connectivity) = (
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
-    voxelization_dict = {
-        "ignore_label": ignore_label,
-        "return_index": True,
-        "return_inverse": True,
-    }
 
-    full_res_coords = []
-
-    for sample in batch:
-
-        full_res_coords.append(sample[0])
-        original_freemasks.append(sample[2])
-        original_colors.append(sample[4])
-        original_normals.append(sample[5])
-        original_coordinates.append(sample[6])
-        idx.append(sample[7])
-        segment_connectivity.append(sample[8])
-
-        coords = np.floor(sample[0] / voxel_size)
-        voxelization_dict.update({"coordinates": torch.from_numpy(coords).to("cpu").contiguous(), "features": sample[1]})
-
-        # maybe this change (_, _, ...) is not necessary, we can directly get out
-        # the sample coordinates?
-        _, _, unique_map, inverse_map = ME.utils.sparse_quantize(**voxelization_dict)
-        inverse_maps.append(inverse_map)
-
-        sample_coordinates = coords[unique_map]
-        coordinates.append(torch.from_numpy(sample_coordinates).int())
-        sample_features = sample[1][unique_map]
-        features.append(torch.from_numpy(sample_features).float())
-        if len(sample[2]) > 0:
-            sample_freemasks = sample[2][unique_map]
-            freemasks.append(torch.from_numpy(sample_freemasks).long())  # [labels, freemasks, segment_ids]
-
-    # Pad all freemasks to the same size for batching (all zeros will be filtered out later)
-    # Keep last dimensions which are segment ids
-    max_freemask_size = max([f.shape[1] for f in freemasks])
-    for batch_id in range(len(freemasks)):
-        pad_zeros = torch.zeros(freemasks[batch_id].shape[0], max_freemask_size - freemasks[batch_id].shape[1], dtype=freemasks[batch_id].dtype)
-        freemasks[batch_id] = torch.cat([freemasks[batch_id][:, :-1], pad_zeros, freemasks[batch_id][:, -1].view(-1, 1)], dim=1)
-
-    # Concatenate all lists
-    input_dict = {"coords": coordinates, "feats": features}
-    if len(freemasks) > 0:
-        input_dict["labels"] = freemasks  # we only need to add labels to collate correctly, [labels, freemasks, segment_ids]
-        coordinates, features, freemasks = ME.utils.sparse_collate(**input_dict)
-    else:
-        coordinates, features = ME.utils.sparse_collate(**input_dict)
-        freemasks = torch.Tensor([])
-
-    input_dict["segment2label"] = []
-    input_dict["segments"] = []
-
-    if len(freemasks) > 0:
-        for i in range(len(input_dict["labels"])):
-            # Calculate the inverse segment association for all points
-            _, ret_index, ret_inv = np.unique(input_dict["labels"][i][:, -1], return_index=True, return_inverse=True)  # calculate unique only over the segment_ids
-            input_dict["segments"].append(torch.from_numpy(ret_inv))   # add first voxel targets to all segments
-            input_dict["labels"][i][:, -1] = torch.from_numpy(ret_inv)  # keep segments both as key and with the labels
-            input_dict["segment2label"].append(input_dict["labels"][i][ret_index][:, :-1])   # [labels, all_freemasks]
-
-    if "labels" in input_dict:
-        list_labels = input_dict["labels"]  # [labels, freemasks, segment_ids]
-
-        target = []
-        target_full = []
-
-        if len(list_labels[0].shape) == 1:  # we only have the segment ids in test phase
-            for batch_id in range(len(list_labels)):
-                label_ids = list_labels[batch_id].unique()
-                target.append({
-                    'labels': label_ids,
-                    'masks': list_labels[batch_id] == label_ids.unsqueeze(1)
-                })
-        else:
-            target = get_instance_freemasks(list_labels, list_segments=input_dict["segment2label"])
-
-            for i in range(len(target)):
-                target[i]["point2segment"] = input_dict["labels"][i][:, -1]
-
-            target_full = get_instance_freemasks([torch.from_numpy(l) for l in original_freemasks])
-            for i in range(len(target_full)):
-                target_full[i]["point2segment"] = torch.from_numpy(original_freemasks[i][:, -1]).long()
-    else:
-        target = []
-        target_full = []
-        coordinates = []
-        features = []
-
-    return (
-        NoGpu(coordinates, features, original_freemasks, inverse_maps, full_res_coords,
-              target_full, original_colors, original_normals, original_coordinates, idx, segment_connectivity), target,
-        [sample[3] for sample in batch]
-    )
-
-def get_instance_freemasks(list_freemasks, list_segments=None):
-    target = []
-
-    # list_freemasks is a len(batch_num) list of [labels, freemasks, segment_ids]
-    for batch_id in range(len(list_freemasks)):
-        label_ids = []
-        masks = []
-        segment_masks = []
-        instance_num = list_freemasks[batch_id].shape[1] - 2  # num of masks - label_ids - segment_ids
-
-        for instance_id in range(instance_num):
-            hard_instance_freemask = list_freemasks[batch_id][:, instance_id + 1].bool()  # skipping the labels columns
-            label_id = torch.as_tensor(1)  # foreground
-
-            # if no foreground was predicted we don't accept this instance ( either padded or no foreground)
-            if hard_instance_freemask.sum() == 0:
-                continue
-
-            label_ids.append(label_id)
-            masks.append(hard_instance_freemask)
-
-            if list_segments:
-                segment_mask = torch.zeros(list_segments[batch_id].shape[0]).bool()
-                segment_mask[list_freemasks[batch_id][hard_instance_freemask].unique()] = True
-                segment_masks.append(segment_mask)
-
-        if len(label_ids) == 0:
-            return list()
-
-        # Stack up the input targets
-        label_ids = torch.stack(label_ids)
-        masks = torch.stack(masks)
-        if list_segments:
-            segment_masks = torch.stack(segment_masks)
-
-        # return targets prepared for instance segmentation w/ or w/o segments
-        if list_segments:
-            target.append({
-                'labels': label_ids,
-                'masks': masks,
-                'segment_mask': segment_masks
-            })
-        else:
-            target.append({
-                'labels': label_ids,
-                'masks': masks
-            })
-    return target
-
-def get_instance_masks(list_labels, task, list_segments=None, ignore_class_threshold=100,
-                       filter_out_classes=[], label_offset=0):
+def get_instance_masks(
+    list_labels,
+    task,
+    list_segments=None,
+    ignore_class_threshold=100,
+    filter_out_classes=[],
+    label_offset=0,
+):
     target = []
 
     for batch_id in range(len(list_labels)):
@@ -542,21 +451,35 @@ def get_instance_masks(list_labels, task, list_segments=None, ignore_class_thres
 
             # TODO is it possible that a ignore class (255) is an instance???
             # instance == -1 ???
-            tmp = list_labels[batch_id][list_labels[batch_id][:, 1] == instance_id]
+            tmp = list_labels[batch_id][
+                list_labels[batch_id][:, 1] == instance_id
+            ]
             label_id = tmp[0, 0]
 
-            if label_id in filter_out_classes:  # floor, wall, undefined==255 is not included
+            if (
+                label_id in filter_out_classes
+            ):  # floor, wall, undefined==255 is not included
                 continue
 
-            if 255 in filter_out_classes and label_id.item() == 255 and tmp.shape[0] < ignore_class_threshold:
+            if (
+                255 in filter_out_classes
+                and label_id.item() == 255
+                and tmp.shape[0] < ignore_class_threshold
+            ):
                 continue
 
             label_ids.append(label_id)
             masks.append(list_labels[batch_id][:, 1] == instance_id)
 
             if list_segments:
-                segment_mask = torch.zeros(list_segments[batch_id].shape[0]).bool()
-                segment_mask[list_labels[batch_id][list_labels[batch_id][:, 1] == instance_id][:, 2].unique()] = True
+                segment_mask = torch.zeros(
+                    list_segments[batch_id].shape[0]
+                ).bool()
+                segment_mask[
+                    list_labels[batch_id][
+                        list_labels[batch_id][:, 1] == instance_id
+                    ][:, 2].unique()
+                ] = True
                 segment_masks.append(segment_mask)
 
         if len(label_ids) == 0:
@@ -572,13 +495,15 @@ def get_instance_masks(list_labels, task, list_segments=None, ignore_class_thres
             new_masks = []
             new_segment_masks = []
             for label_id in label_ids.unique():
-                masking = (label_ids == label_id)
+                masking = label_ids == label_id
 
                 new_label_ids.append(label_id)
                 new_masks.append(masks[masking, :].sum(dim=0).bool())
 
                 if list_segments:
-                    new_segment_masks.append(segment_masks[masking, :].sum(dim=0).bool())
+                    new_segment_masks.append(
+                        segment_masks[masking, :].sum(dim=0).bool()
+                    )
 
             label_ids = torch.stack(new_label_ids)
             masks = torch.stack(new_masks)
@@ -586,30 +511,28 @@ def get_instance_masks(list_labels, task, list_segments=None, ignore_class_thres
             if list_segments:
                 segment_masks = torch.stack(new_segment_masks)
 
-                target.append({
-                    'labels': label_ids,
-                    'masks': masks,
-                    'segment_mask': segment_masks
-                })
+                target.append(
+                    {
+                        "labels": label_ids,
+                        "masks": masks,
+                        "segment_mask": segment_masks,
+                    }
+                )
             else:
-                target.append({
-                    'labels': label_ids,
-                    'masks': masks
-                })
+                target.append({"labels": label_ids, "masks": masks})
         else:
             l = torch.clamp(label_ids - label_offset, min=0)
 
             if list_segments:
-                target.append({
-                    'labels': l,
-                    'masks': masks,
-                    'segment_mask': segment_masks
-                })
+                target.append(
+                    {
+                        "labels": l,
+                        "masks": masks,
+                        "segment_mask": segment_masks,
+                    }
+                )
             else:
-                target.append({
-                    'labels': l,
-                    'masks': masks
-                })
+                target.append({"labels": l, "masks": masks})
     return target
 
 
@@ -639,7 +562,9 @@ def make_crops(batch):
             )
         )
         scene[1] = np.vstack((scene[1], np.zeros((4, scene[1].shape[1]))))
-        scene[2] = np.concatenate((scene[2], np.full_like((scene[2]), 255)[:4]))
+        scene[2] = np.concatenate(
+            (scene[2], np.full_like((scene[2]), 255)[:4])
+        )
 
         crop = scene[0][:, 0] > 0
         crop &= scene[0][:, 1] > 0
@@ -669,11 +594,19 @@ def make_crops(batch):
 
 class NoGpu:
     def __init__(
-            self, coordinates, features, original_labels=None, inverse_maps=None, full_res_coords=None,
-            target_full=None, original_colors=None, original_normals=None, original_coordinates=None,
-            idx=None, segment_connectivity=None
+        self,
+        coordinates,
+        features,
+        original_labels=None,
+        inverse_maps=None,
+        full_res_coords=None,
+        target_full=None,
+        original_colors=None,
+        original_normals=None,
+        original_coordinates=None,
+        idx=None,
     ):
-        """ helper class to prevent gpu loading on lightning """
+        """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
         self.features = features
         self.original_labels = original_labels
@@ -684,13 +617,19 @@ class NoGpu:
         self.original_normals = original_normals
         self.original_coordinates = original_coordinates
         self.idx = idx
-        self.segment_connectivity = segment_connectivity
+
 
 class NoGpuMask:
     def __init__(
-            self, coordinates, features, original_labels=None, inverse_maps=None, masks=None, labels=None
+        self,
+        coordinates,
+        features,
+        original_labels=None,
+        inverse_maps=None,
+        masks=None,
+        labels=None,
     ):
-        """ helper class to prevent gpu loading on lightning """
+        """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
         self.features = features
         self.original_labels = original_labels

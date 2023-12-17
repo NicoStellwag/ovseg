@@ -472,7 +472,7 @@ def main(cfg):
     )
 
     device = torch.device("cuda:0")
-    loader = NormalizedCutDataset.dataloader_from_hydra(cfg.ncut.data, only_first=False)
+    loader = NormalizedCutDataset.dataloader_from_hydra(cfg.ncut.data, only_first=True)
 
     n_scenes = len(loader)
     for i_scene, sample in enumerate(loader):

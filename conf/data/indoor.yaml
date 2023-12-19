@@ -22,7 +22,7 @@ task: ${general.task}
 # data loader
 pin_memory: false
 num_workers: 4
-batch_size: 3
+batch_size: 2
 test_batch_size: 1
 cache_data: false
 
@@ -31,6 +31,7 @@ voxel_size: 0.02
 
 reps_per_epoch: ${general.reps_per_epoch}
 
+ds_cache_data: true # must be true if cropping is true
 cropping: false
 cropping_args:
   min_points: 30000

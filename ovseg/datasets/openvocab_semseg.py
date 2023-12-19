@@ -446,6 +446,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
             coordinates -= coordinates.mean(0)
 
+            # augmentation: random shift of coordinates
             try:
                 coordinates += (
                     np.random.uniform(coordinates.min(0), coordinates.max(0)) / 2

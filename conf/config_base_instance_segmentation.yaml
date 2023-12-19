@@ -18,7 +18,7 @@ general:
   project_name: ovseg
   workspace: ovseg
   experiment_name: ???
-  num_targets: 19
+  num_targets: 200
   add_instance: true
   dbscan_eps: 0.95
   dbscan_min_points: 1

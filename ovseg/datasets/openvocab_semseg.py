@@ -90,6 +90,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         self.is_elastic_distortion = is_elastic_distortion
         self.color_drop = color_drop
 
+        # define mapping from labels to colors to encode labels in normal mesh formats
         if self.dataset_name == "scannet":
             self.color_map = SCANNET_COLOR_MAP_20
             self.color_map[255] = (255, 255, 255)
@@ -111,7 +112,10 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 13: [60, 130, 60],  # Clutter
                 14: [130, 30, 60],
             }  # Fence
-        elif self.dataset_name == "scannet200" or self.dataset_name == "openvocab_scannet200":
+        elif (
+            self.dataset_name == "scannet200"
+            or self.dataset_name == "openvocab_scannet200"
+        ):
             self.color_map = SCANNET_COLOR_MAP_200
         elif self.dataset_name == "s3dis":
             self.color_map = {
@@ -186,9 +190,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             database_path = Path(database_path)
             if self.dataset_name != "s3dis":
                 if not (database_path / f"{mode}_database.yaml").exists():
-                    print(
-                        f"generate {database_path}/{mode}_database.yaml first"
-                    )
+                    print(f"generate {database_path}/{mode}_database.yaml first")
                     exit()
                 self._data.extend(
                     self._load_yaml(database_path / f"{mode}_database.yaml")
@@ -197,25 +199,17 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 mode_s3dis = f"Area_{self.area}"
                 if self.mode == "train":
                     mode_s3dis = "train_" + mode_s3dis
-                if not (
-                    database_path / f"{mode_s3dis}_database.yaml"
-                ).exists():
-                    print(
-                        f"generate {database_path}/{mode_s3dis}_database.yaml first"
-                    )
+                if not (database_path / f"{mode_s3dis}_database.yaml").exists():
+                    print(f"generate {database_path}/{mode_s3dis}_database.yaml first")
                     exit()
                 self._data.extend(
-                    self._load_yaml(
-                        database_path / f"{mode_s3dis}_database.yaml"
-                    )
+                    self._load_yaml(database_path / f"{mode_s3dis}_database.yaml")
                 )
         if data_percent < 1.0:
-            self._data = sample(
-                self._data, int(len(self._data) * data_percent)
-            )
+            self._data = sample(self._data, int(len(self._data) * data_percent))
         labels = self._load_yaml(Path(label_db_filepath))
 
-        # if working only on classes for validation - discard others
+        # if working only on classes for validation - discard other labels
         self._labels = self._select_correct_labels(labels, num_labels)
 
         if instance_oversampling > 0:
@@ -238,11 +232,9 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         elif len(color_mean_std[0]) == 3 and len(color_mean_std[1]) == 3:
             color_mean, color_std = color_mean_std[0], color_mean_std[1]
         else:
-            logger.error(
-                "pass mean and std as tuple of tuples, or as an .yaml file"
-            )
+            logger.error("pass mean and std as tuple of tuples, or as an .yaml file")
 
-        # augmentations
+        # initialize augmentations
         self.volume_augmentations = V.NoOp()
         if (volume_augmentations_path is not None) and (
             volume_augmentations_path != "none"
@@ -280,11 +272,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                                         "instance_gt_filepath": self._data[i][
                                             "instance_gt_filepath"
                                         ][block_id]
-                                        if len(
-                                            self._data[i][
-                                                "instance_gt_filepath"
-                                            ]
-                                        )
+                                        if len(self._data[i]["instance_gt_filepath"])
                                         > 0
                                         else list(),
                                         "scene": f"{self._data[i]['scene'].replace('.txt', '')}_{block_id}.txt",
@@ -311,11 +299,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                                         "instance_gt_filepath": self._data[i][
                                             "instance_gt_filepath"
                                         ][block_id]
-                                        if len(
-                                            self._data[i][
-                                                "instance_gt_filepath"
-                                            ]
-                                        )
+                                        if len(self._data[i]["instance_gt_filepath"])
                                         > 0
                                         else list(),
                                         "scene": f"{self._data[i]['scene'].replace('.txt', '')}_{block_id}.txt",
@@ -333,17 +317,18 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             # self._data = new_data
 
     def splitPointCloud(self, cloud, size=50.0, stride=50, inner_core=-1):
+        """
+        splits point cloud to smaller sized patches
+        """
         if inner_core == -1:
             limitMax = np.amax(cloud[:, 0:3], axis=0)
             width = int(np.ceil((limitMax[0] - size) / stride)) + 1
             depth = int(np.ceil((limitMax[1] - size) / stride)) + 1
             cells = [
-                (x * stride, y * stride)
-                for x in range(width)
-                for y in range(depth)
+                (x * stride, y * stride) for x in range(width) for y in range(depth)
             ]
             blocks = []
-            for (x, y) in cells:
+            for x, y in cells:
                 xcond = (cloud[:, 0] <= x + size) & (cloud[:, 0] >= x)
                 ycond = (cloud[:, 1] <= y + size) & (cloud[:, 1] >= y)
                 cond = xcond & ycond
@@ -355,19 +340,17 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             width = int(np.ceil((limitMax[0] - inner_core) / stride)) + 1
             depth = int(np.ceil((limitMax[1] - inner_core) / stride)) + 1
             cells = [
-                (x * stride, y * stride)
-                for x in range(width)
-                for y in range(depth)
+                (x * stride, y * stride) for x in range(width) for y in range(depth)
             ]
             blocks_outer = []
             conds_inner = []
-            for (x, y) in cells:
-                xcond_outer = (
-                    cloud[:, 0] <= x + inner_core / 2.0 + size / 2
-                ) & (cloud[:, 0] >= x + inner_core / 2.0 - size / 2)
-                ycond_outer = (
-                    cloud[:, 1] <= y + inner_core / 2.0 + size / 2
-                ) & (cloud[:, 1] >= y + inner_core / 2.0 - size / 2)
+            for x, y in cells:
+                xcond_outer = (cloud[:, 0] <= x + inner_core / 2.0 + size / 2) & (
+                    cloud[:, 0] >= x + inner_core / 2.0 - size / 2
+                )
+                ycond_outer = (cloud[:, 1] <= y + inner_core / 2.0 + size / 2) & (
+                    cloud[:, 1] >= y + inner_core / 2.0 - size / 2
+                )
 
                 cond_outer = xcond_outer & ycond_outer
                 block_outer = cloud[cond_outer, :]
@@ -386,6 +369,9 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             return conds_inner, blocks_outer
 
     def map2color(self, labels):
+        """
+        list of labels to list of their respective colors
+        """
         output_colors = list()
 
         for label in labels:
@@ -404,6 +390,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         if self.is_tta:
             idx = idx % len(self.data)
 
+        # load preprocessed data from disk
         if self.cache_data:
             points = self.data[idx]["data"]
         else:
@@ -431,6 +418,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
         # volume and image augmentations for train
         if "train" in self.mode or self.is_tta:
+            # augmentation: extract random crop from scene if specified
             if self.cropping:
                 new_idx = self.random_cuboid(
                     coordinates,
@@ -451,14 +439,14 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
             try:
                 coordinates += (
-                    np.random.uniform(coordinates.min(0), coordinates.max(0))
-                    / 2
+                    np.random.uniform(coordinates.min(0), coordinates.max(0)) / 2
                 )
             except OverflowError as err:
                 print(coordinates)
                 print(coordinates.shape)
                 raise err
 
+            # augmentation: add additional affine transformed object instances to the scene
             if self.instance_oversampling > 0.0:
                 (
                     coordinates,
@@ -473,20 +461,25 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                     self.instance_oversampling,
                 )
 
+            # augmentation: randomly flip coord systems of quadrants of scene
             if self.flip_in_center:
                 coordinates = flip_in_center(coordinates)
 
+            # augmentation: randomly flip whole scene around axis
             for i in (0, 1):
                 if random() < 0.5:
                     coord_max = np.max(points[:, i])
                     coordinates[:, i] = coord_max - coordinates[:, i]
 
+            # augmentation: elastic distortion of scene coord system
             if random() < 0.95:
                 if self.is_elastic_distortion:
                     for granularity, magnitude in ((0.2, 0.4), (0.8, 1.6)):
                         coordinates = elastic_distortion(
                             coordinates, granularity, magnitude
                         )
+
+            # augmentation: apply 3d augmentations defined in volumentation config
             aug = self.volume_augmentations(
                 points=coordinates,
                 normals=normals,
@@ -499,11 +492,12 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 aug["normals"],
                 aug["labels"],
             )
-            pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
-            color = np.squeeze(
-                self.image_augmentations(image=pseudo_image)["image"]
-            )
 
+            # augmentation: apply color augmentation defined in albumentation config
+            pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
+            color = np.squeeze(self.image_augmentations(image=pseudo_image)["image"])
+
+            # augmentation: randomly cut out parts of the scene
             if self.point_per_cut != 0:
                 number_of_cuts = int(len(coordinates) / self.point_per_cut)
                 for _ in range(number_of_cuts):
@@ -536,6 +530,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             #         self.ignore_label,
             #     )
 
+            # augmentation: randomly add new points to the scene by sampling around existing points
             if (self.resample_points > 0) or (self.noise_rate > 0):
                 coordinates, color, normals, labels = random_around_points(
                     coordinates,
@@ -547,6 +542,8 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                     self.ignore_label,
                 )
 
+            # augmentation: randomly add UNLABELED points to the scene
+            # (with same augmentations applied to them as the original scene)
             if self.add_unlabeled_pc:
                 if random() < 0.8:
                     new_points = np.load(
@@ -590,16 +587,12 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                         aug["normals"],
                         aug["labels"],
                     )
-                    pseudo_image = unlabeled_color.astype(np.uint8)[
-                        np.newaxis, :, :
-                    ]
+                    pseudo_image = unlabeled_color.astype(np.uint8)[np.newaxis, :, :]
                     unlabeled_color = np.squeeze(
                         self.image_augmentations(image=pseudo_image)["image"]
                     )
 
-                    coordinates = np.concatenate(
-                        (coordinates, unlabeled_coords)
-                    )
+                    coordinates = np.concatenate((coordinates, unlabeled_coords))
                     color = np.concatenate((color, unlabeled_color))
                     normals = np.concatenate((normals, unlabeled_normals))
                     labels = np.concatenate(
@@ -609,6 +602,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                         )
                     )
 
+            # augmentation: remove color information from scene
             if random() < self.color_drop:
                 color[:] = 255
 
@@ -616,6 +610,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
         color = np.squeeze(self.normalize_color(image=pseudo_image)["image"])
 
+        # todo: this will likely have to be deleted
         # prepare labels and map from 0 to 20(40)
         labels = labels.astype(np.int32)
         if labels.size > 0:
@@ -626,6 +621,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
         labels = np.hstack((labels, segments[..., None].astype(np.int32)))
 
+        # features are colors + optionally normals + optionally coords
         features = color
         if self.add_normals:
             features = np.hstack((features, normals))
@@ -642,6 +638,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         ]:
             return self.__getitem__(0)
 
+        # return augmented scene + raw scene
         if self.dataset_name == "s3dis":
             return (
                 coordinates,
@@ -698,6 +695,10 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         return file
 
     def _select_correct_labels(self, labels, num_labels):
+        """
+        filter labels to the ones that are actually
+        used for a specific mode (train/val/test)
+        """
         number_of_validation_labels = 0
         number_of_all_labels = 0
         for (
@@ -725,15 +726,20 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             raise ValueError(msg)
 
     def _remap_from_zero(self, labels):
-        labels[
-            ~np.isin(labels, list(self.label_info.keys()))
-        ] = self.ignore_label
+        """
+        remap label map to ascending label ids starting at 0
+        """
+        labels[~np.isin(labels, list(self.label_info.keys()))] = self.ignore_label
         # remap to the range from 0
         for i, k in enumerate(self.label_info.keys()):
             labels[labels == k] = i
         return labels
 
     def _remap_model_output(self, output):
+        """
+        remap a set of labels of the 0-indexed label ids
+        back to the original dataset label ids
+        """
         output = np.array(output)
         output_remapped = output.copy()
         for i, k in enumerate(self.label_info.keys()):
@@ -743,36 +749,30 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
     def augment_individual_instance(
         self, coordinates, color, normals, labels, oversampling=1.0
     ):
+        """
+        augment scene by randomly additionally adding affine transformed versions of
+        object instances contained in the scene
+        """
         max_instance = int(len(np.unique(labels[:, 1])))
         # randomly selecting half of non-zero instances
         for instance in range(0, int(max_instance * oversampling)):
             if self.place_around_existing:
                 center = choice(
-                    coordinates[
-                        labels[:, 1] == choice(np.unique(labels[:, 1]))
-                    ]
+                    coordinates[labels[:, 1] == choice(np.unique(labels[:, 1]))]
                 )
             else:
-                center = np.array(
-                    [uniform(-5, 5), uniform(-5, 5), uniform(-0.5, 2)]
-                )
+                center = np.array([uniform(-5, 5), uniform(-5, 5), uniform(-0.5, 2)])
             instance = choice(choice(self.instance_data))
             instance = np.load(instance["instance_filepath"])
             # centering two objects
-            instance[:, :3] = (
-                instance[:, :3] - instance[:, :3].mean(axis=0) + center
-            )
+            instance[:, :3] = instance[:, :3] - instance[:, :3].mean(axis=0) + center
             max_instance = max_instance + 1
             instance[:, -1] = max_instance
             aug = V.Compose(
                 [
                     V.Scale3d(),
-                    V.RotateAroundAxis3d(
-                        rotation_limit=np.pi / 24, axis=(1, 0, 0)
-                    ),
-                    V.RotateAroundAxis3d(
-                        rotation_limit=np.pi / 24, axis=(0, 1, 0)
-                    ),
+                    V.RotateAroundAxis3d(rotation_limit=np.pi / 24, axis=(1, 0, 0)),
+                    V.RotateAroundAxis3d(rotation_limit=np.pi / 24, axis=(0, 1, 0)),
                     V.RotateAroundAxis3d(rotation_limit=np.pi, axis=(0, 0, 1)),
                 ]
             )(
@@ -808,15 +808,9 @@ def elastic_distortion(pointcloud, granularity, magnitude):
 
     # Smoothing.
     for _ in range(2):
-        noise = scipy.ndimage.filters.convolve(
-            noise, blurx, mode="constant", cval=0
-        )
-        noise = scipy.ndimage.filters.convolve(
-            noise, blury, mode="constant", cval=0
-        )
-        noise = scipy.ndimage.filters.convolve(
-            noise, blurz, mode="constant", cval=0
-        )
+        noise = scipy.ndimage.filters.convolve(noise, blurx, mode="constant", cval=0)
+        noise = scipy.ndimage.filters.convolve(noise, blury, mode="constant", cval=0)
+        noise = scipy.ndimage.filters.convolve(noise, blurz, mode="constant", cval=0)
 
     # Trilinear interpolate noise filters for each spatial dimensions.
     ax = [
@@ -835,6 +829,9 @@ def elastic_distortion(pointcloud, granularity, magnitude):
 
 
 def crop(points, x_min, y_min, z_min, x_max, y_max, z_max):
+    """
+    return crop of scene specified by min and max values along coordinate system axis
+    """
     if x_max <= x_min or y_max <= y_min or z_max <= z_min:
         raise ValueError(
             "We should have x_min < x_max and y_min < y_max and z_min < z_max. But we got"
@@ -863,6 +860,9 @@ def crop(points, x_min, y_min, z_min, x_max, y_max, z_max):
 
 
 def flip_in_center(coordinates):
+    """
+    augment scene by independently flipping four quadrants of the scene
+    """
     # moving coordinates to center
     coordinates -= coordinates.mean(0)
     aug = V.Compose(
@@ -890,9 +890,7 @@ def flip_in_center(coordinates):
         minimum = coordinates[second_crop].min(0)
         minimum[2] = 0
         minimum[0] = 0
-        coordinates[second_crop] = aug(points=coordinates[second_crop])[
-            "points"
-        ]
+        coordinates[second_crop] = aug(points=coordinates[second_crop])["points"]
         coordinates[second_crop] += minimum
     if third_crop.size > 1:
         minimum = coordinates[third_crop].min(0)
@@ -903,9 +901,7 @@ def flip_in_center(coordinates):
     if fourth_crop.size > 1:
         minimum = coordinates[fourth_crop].min(0)
         minimum[2] = 0
-        coordinates[fourth_crop] = aug(points=coordinates[fourth_crop])[
-            "points"
-        ]
+        coordinates[fourth_crop] = aug(points=coordinates[fourth_crop])["points"]
         coordinates[fourth_crop] += minimum
 
     return coordinates
@@ -920,6 +916,9 @@ def random_around_points(
     noise_rate=0,
     ignore_label=255,
 ):
+    """
+    augments scene by adding randomly sampled points around the real points
+    """
     coord_indexes = sample(
         list(range(len(coordinates))), k=int(len(coordinates) * rate)
     )
@@ -953,25 +952,21 @@ def random_around_points(
 def random_points(
     coordinates, color, normals, labels, noise_rate=0.6, ignore_label=255
 ):
+    """
+    augments scene by adding randomly sampled points around the real points
+    (this one seems to be unused - instead: random_around_points)
+    """
     max_boundary = coordinates.max(0) + 0.1
     min_boundary = coordinates.min(0) - 0.1
 
-    noisy_coordinates = int(
-        (max(max_boundary) - min(min_boundary)) / noise_rate
-    )
+    noisy_coordinates = int((max(max_boundary) - min(min_boundary)) / noise_rate)
 
     noisy_coordinates = np.array(
         list(
             product(
-                np.linspace(
-                    min_boundary[0], max_boundary[0], noisy_coordinates
-                ),
-                np.linspace(
-                    min_boundary[1], max_boundary[1], noisy_coordinates
-                ),
-                np.linspace(
-                    min_boundary[2], max_boundary[2], noisy_coordinates
-                ),
+                np.linspace(min_boundary[0], max_boundary[0], noisy_coordinates),
+                np.linspace(min_boundary[1], max_boundary[1], noisy_coordinates),
+                np.linspace(min_boundary[2], max_boundary[2], noisy_coordinates),
             )
         )
     )
@@ -981,9 +976,7 @@ def random_points(
 
     noisy_color = np.random.randint(0, 255, size=noisy_coordinates.shape)
     noisy_normals = np.random.rand(*noisy_coordinates.shape) * 2 - 1
-    noisy_labels = np.full(
-        (noisy_coordinates.shape[0], labels.shape[1]), ignore_label
-    )
+    noisy_labels = np.full((noisy_coordinates.shape[0], labels.shape[1]), ignore_label)
 
     coordinates = np.vstack((coordinates, noisy_coordinates))
     color = np.vstack((color, noisy_color))

@@ -437,13 +437,13 @@ def segment_scene(
 
 def mean_instance_feature(segment_featues, segmentwise_instances):
     """
-    parameters:
+    arguments:
     segment_features: np(n_segments, dim_feature)
     segmentwise_instances: np(n_segments, n_instances) (one hot instances)
 
     returns:
     mean segment features np(n_instances, dim_feat)
-    segments that do not belong to any instance or have feature == 0 are ignored
+    segments that do not belong to any instance or have sum(feature) == 0 are ignored
     """
     n_instances = segmentwise_instances.shape[1]
     dim_feat = segment_featues.shape[1]

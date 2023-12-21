@@ -36,9 +36,12 @@ train_dataset:
   label_offset: 2
 
 validation_dataset:
-  _target_: datasets.semseg.SemanticSegmentationDataset
-  dataset_name: "scannet200"
+  _target_: ovseg.datasets.openvocab_semseg.OpenVocabSemanticSegmentationDataset
+  dataset_name: "openvocab_scannet200"
   data_dir: /mnt/hdd/scannet200_preprocessed
+  ground_truth_dir: /mnt/hdd/self_training_initial
+  point_instances_file: pointwise_instances.npy
+  instance_labels_file: instance_labels.npy
   image_augmentations_path: null
   volume_augmentations_path: null
   label_db_filepath: /mnt/hdd/scannet200_preprocessed/label_database.yaml
@@ -59,9 +62,12 @@ validation_dataset:
   label_offset: 2
 
 test_dataset:
-  _target_: datasets.semseg.SemanticSegmentationDataset
-  dataset_name: "scannet200"
+  _target_: ovseg.datasets.openvocab_semseg.OpenVocabSemanticSegmentationDataset
+  dataset_name: "openvocab_scannet200"
   data_dir: /mnt/hdd/scannet200_preprocessed
+  ground_truth_dir: /mnt/hdd/self_training_initial
+  point_instances_file: pointwise_instances.npy
+  instance_labels_file: instance_labels.npy
   image_augmentations_path: null
   volume_augmentations_path: null
   label_db_filepath: /mnt/hdd/scannet200_preprocessed/label_database.yaml

@@ -39,9 +39,7 @@ class OpenVocabVoxelizeCollate:
         self.num_queries = num_queries
 
     def __call__(self, batch):
-        if ("train" in self.mode) and (
-            self.small_crops or self.very_small_crops
-        ):
+        if ("train" in self.mode) and (self.small_crops or self.very_small_crops):
             batch = make_crops(batch)
         if ("train" in self.mode) and self.very_small_crops:
             batch = make_crops(batch)
@@ -63,6 +61,7 @@ class VoxelizeCollateMerge:
     """
     NOT ADPATED!
     """
+
     def __init__(
         self,
         ignore_label=255,
@@ -129,9 +128,7 @@ class VoxelizeCollateMerge:
                     if j == 0:
                         batch_filenames = batch[i + j][3]
                     else:
-                        batch_filenames = (
-                            batch_filenames + f"+{batch[i + j][3]}"
-                        )
+                        batch_filenames = batch_filenames + f"+{batch[i + j][3]}"
 
                     batch_raw_color.append(batch[i + j][4])
                     batch_raw_normals.append(batch[i + j][5])
@@ -139,18 +136,13 @@ class VoxelizeCollateMerge:
                     # make instance ids and segment ids unique
                     # take care that -1 instances stay at -1
                     batch_labels.append(
-                        batch[i + j][2]
-                        + [0, offset_instance_id, offset_segment_id]
+                        batch[i + j][2] + [0, offset_instance_id, offset_segment_id]
                     )
                     batch_labels[-1][batch[i + j][2][:, 1] == -1, 1] = -1
 
-                    max_instance_id, max_segment_id = batch[i + j][2].max(
-                        axis=0
-                    )[1:]
+                    max_instance_id, max_segment_id = batch[i + j][2].max(axis=0)[1:]
                     offset_segment_id = offset_segment_id + max_segment_id + 1
-                    offset_instance_id = (
-                        offset_instance_id + max_instance_id + 1
-                    )
+                    offset_instance_id = offset_instance_id + max_instance_id + 1
 
                 if (len(batch_coordinates) == 2) and self.place_nearby:
                     border = batch_coordinates[0][:, 0].max()
@@ -183,9 +175,7 @@ class VoxelizeCollateMerge:
                             np.concatenate(
                                 (
                                     batch[i][2],
-                                    np.full_like(
-                                        batch[i + 1][2], self.ignore_label
-                                    ),
+                                    np.full_like(batch[i + 1][2], self.ignore_label),
                                 )
                             ),
                         ]
@@ -196,9 +186,7 @@ class VoxelizeCollateMerge:
                             np.vstack((batch[i][1], batch[i + 1][1])),
                             np.concatenate(
                                 (
-                                    np.full_like(
-                                        batch[i][2], self.ignore_label
-                                    ),
+                                    np.full_like(batch[i][2], self.ignore_label),
                                     batch[i + 1][2],
                                 )
                             ),
@@ -273,10 +261,10 @@ def voxelize(
         full_res_coords.append(sample[0])
         original_colors.append(sample[5])
         original_normals.append(sample[6])
-        
+
         # instance ids are left unchanged throughout voxelize collate,
-        # so we can just pass the instance's clip vecs through without
-        # any modification
+        # so we can just pass the instance's clip vecs through the target
+        # without any modification
         instance_feature_vecs.append(sample[3])
 
         coords = np.floor(sample[0] / voxel_size)
@@ -289,9 +277,7 @@ def voxelize(
 
         # maybe this change (_, _, ...) is not necessary and we can directly get out
         # the sample coordinates?
-        _, _, unique_map, inverse_map = ME.utils.sparse_quantize(
-            **voxelization_dict
-        )
+        _, _, unique_map, inverse_map = ME.utils.sparse_quantize(**voxelization_dict)
         inverse_maps.append(inverse_map)
 
         sample_coordinates = coords[unique_map]
@@ -317,14 +303,12 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
-                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
             ),
             labels,
         )
 
-    
     # turn labels (semantic class ids) into consecutive sequence starting at 0
     # if train mode do the same for segment ids
     if mode == "test":
@@ -372,8 +356,8 @@ def voxelize(
                 target.append(
                     {
                         "labels": label_ids,
-                        "masks": list_labels[batch_id]
-                        == label_ids.unsqueeze(1),
+                        "masks": list_labels[batch_id] == label_ids.unsqueeze(1),
+                        "instance_feats": instance_feature_vecs,
                     }
                 )
         else:
@@ -381,9 +365,7 @@ def voxelize(
             # resolution is just semantic class of points
             if mode == "test":
                 for i in range(len(input_dict["labels"])):
-                    target.append(
-                        {"point2segment": input_dict["labels"][i][:, 0]}
-                    )
+                    target.append({"point2segment": input_dict["labels"][i][:, 0]})
                     target_full.append(
                         {
                             "point2segment": torch.from_numpy(
@@ -396,6 +378,7 @@ def voxelize(
             else:
                 target = get_instance_masks(
                     list_labels,
+                    instance_feature_vecs,
                     list_segments=input_dict["segment2label"],
                     task=task,
                     ignore_class_threshold=ignore_class_threshold,
@@ -407,6 +390,7 @@ def voxelize(
                 if "train" not in mode:
                     target_full = get_instance_masks(
                         [torch.from_numpy(l) for l in original_labels],
+                        instance_feature_vecs,
                         task=task,
                         ignore_class_threshold=ignore_class_threshold,
                         filter_out_classes=filter_out_classes,
@@ -427,7 +411,6 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
-                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
                 full_res_coords,
@@ -445,7 +428,6 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
-                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
                 full_res_coords,
@@ -457,6 +439,7 @@ def voxelize(
 
 def get_instance_masks(
     list_labels,
+    instance_feature_vecs,
     task,
     list_segments=None,
     ignore_class_threshold=100,
@@ -489,9 +472,7 @@ def get_instance_masks(
             # filter out some semantic classes that can be specified
             # TODO is it possible that a ignore class (255) is an instance???
             # instance == -1 ???
-            tmp = list_labels[batch_id][
-                list_labels[batch_id][:, 1] == instance_id
-            ]
+            tmp = list_labels[batch_id][list_labels[batch_id][:, 1] == instance_id]
             label_id = tmp[0, 0]
 
             if (
@@ -511,20 +492,18 @@ def get_instance_masks(
 
             # also create segment level masks if necessary
             if list_segments:
-                segment_mask = torch.zeros(
-                    list_segments[batch_id].shape[0]
-                ).bool()
+                segment_mask = torch.zeros(list_segments[batch_id].shape[0]).bool()
                 segment_mask[
-                    list_labels[batch_id][
-                        list_labels[batch_id][:, 1] == instance_id
-                    ][:, 2].unique()
+                    list_labels[batch_id][list_labels[batch_id][:, 1] == instance_id][
+                        :, 2
+                    ].unique()
                 ] = True
                 segment_masks.append(segment_mask)
 
         if len(label_ids) == 0:
             return list()
 
-        # stack 
+        # stack
         label_ids = torch.stack(label_ids)
         masks = torch.stack(masks)
         if list_segments:
@@ -558,10 +537,17 @@ def get_instance_masks(
                         "labels": label_ids,
                         "masks": masks,
                         "segment_mask": segment_masks,
+                        "instance_feats": instance_feature_vecs,
                     }
                 )
             else:
-                target.append({"labels": label_ids, "masks": masks})
+                target.append(
+                    {
+                        "labels": label_ids,
+                        "masks": masks,
+                        "instance_feats": instance_feature_vecs,
+                    }
+                )
         else:
             l = torch.clamp(label_ids - label_offset, min=0)
 
@@ -571,10 +557,17 @@ def get_instance_masks(
                         "labels": l,
                         "masks": masks,
                         "segment_mask": segment_masks,
+                        "instance_feats": instance_feature_vecs,
                     }
                 )
             else:
-                target.append({"labels": l, "masks": masks})
+                target.append(
+                    {
+                        "labels": l,
+                        "masks": masks,
+                        "instance_feats": instance_feature_vecs,
+                    }
+                )
     return target
 
 
@@ -609,9 +602,7 @@ def make_crops(batch):
             )
         )
         scene[1] = np.vstack((scene[1], np.zeros((4, scene[1].shape[1]))))
-        scene[2] = np.concatenate(
-            (scene[2], np.full_like((scene[2]), 255)[:4])
-        )
+        scene[2] = np.concatenate((scene[2], np.full_like((scene[2]), 255)[:4]))
 
         crop = scene[0][:, 0] > 0
         crop &= scene[0][:, 1] > 0
@@ -644,7 +635,6 @@ class NoGpu:
         self,
         coordinates,
         features,
-        instance_feature_vecs,
         original_labels=None,
         inverse_maps=None,
         full_res_coords=None,
@@ -657,7 +647,6 @@ class NoGpu:
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
         self.features = features
-        self.instance_feature_vecs = instance_feature_vecs
         self.original_labels = original_labels
         self.inverse_maps = inverse_maps
         self.full_res_coords = full_res_coords

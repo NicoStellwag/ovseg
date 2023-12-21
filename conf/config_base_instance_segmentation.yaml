@@ -18,7 +18,7 @@ general:
   project_name: ovseg
   workspace: ovseg
   experiment_name: ???
-  num_targets: 200
+  num_targets: 128 # clip would be too large => learn encoder and compare against that
   add_instance: true
   dbscan_eps: 0.95
   dbscan_min_points: 1

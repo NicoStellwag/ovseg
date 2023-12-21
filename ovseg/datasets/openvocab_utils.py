@@ -4,7 +4,7 @@ import torch
 from random import random
 
 
-class VoxelizeCollate:
+class OpenVocabVoxelizeCollate:
     def __init__(
         self,
         ignore_label=255,
@@ -60,6 +60,9 @@ class VoxelizeCollate:
 
 
 class VoxelizeCollateMerge:
+    """
+    NOT ADPATED!
+    """
     def __init__(
         self,
         ignore_label=255,
@@ -245,13 +248,14 @@ def voxelize(
         coordinates,
         features,
         labels,
+        instance_feature_vecs,
         original_labels,
         inverse_maps,
         original_colors,
         original_normals,
         original_coordinates,
         idx,
-    ) = ([], [], [], [], [], [], [], [], [])
+    ) = ([], [], [], [], [], [], [], [], [], [])
     voxelization_dict = {
         "ignore_label": ignore_label,
         # "quantization_size": self.voxel_size,
@@ -269,6 +273,11 @@ def voxelize(
         full_res_coords.append(sample[0])
         original_colors.append(sample[5])
         original_normals.append(sample[6])
+        
+        # instance ids are left unchanged throughout voxelize collate,
+        # so we can just pass the instance's clip vecs through without
+        # any modification
+        instance_feature_vecs.append(sample[3])
 
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update(
@@ -308,6 +317,7 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
+                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
             ),
@@ -417,6 +427,7 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
+                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
                 full_res_coords,
@@ -434,6 +445,7 @@ def voxelize(
             NoGpu(
                 coordinates,
                 features,
+                instance_feature_vecs,
                 original_labels,
                 inverse_maps,
                 full_res_coords,
@@ -632,6 +644,7 @@ class NoGpu:
         self,
         coordinates,
         features,
+        instance_feature_vecs,
         original_labels=None,
         inverse_maps=None,
         full_res_coords=None,
@@ -644,6 +657,7 @@ class NoGpu:
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
         self.features = features
+        self.instance_feature_vecs = instance_feature_vecs
         self.original_labels = original_labels
         self.inverse_maps = inverse_maps
         self.full_res_coords = full_res_coords

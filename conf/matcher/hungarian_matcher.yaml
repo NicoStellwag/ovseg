@@ -1,5 +1,5 @@
 # @package _group_
-_target_: models.matcher.HungarianMatcher
+_target_: ovseg.models.openvocab_matcher.OpenVocabHungarianMatcher
 cost_class: 2.
 cost_mask: 5.
 cost_dice: 2.

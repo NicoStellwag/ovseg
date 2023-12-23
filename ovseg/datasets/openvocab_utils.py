@@ -265,7 +265,7 @@ def voxelize(
         # instance ids are left unchanged throughout voxelize collate,
         # so we can just pass the instance's clip vecs through the target
         # without any modification
-        instance_feature_vecs.append(torch.from_numpy(sample[3]))
+        instance_feature_vecs.append(torch.from_numpy(sample[3]).type(torch.float))
 
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update(

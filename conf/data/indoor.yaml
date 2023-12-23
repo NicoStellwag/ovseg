@@ -3,6 +3,9 @@
 # these parameters are inherited by datasets, data_loaders and collators
 # but they might be overwritten
 
+# other dirs
+feature_dim_reduction_path: /mnt/hdd/self_training_initial/pca.pkl
+
 # splits
 train_mode: train
 validation_mode: validation

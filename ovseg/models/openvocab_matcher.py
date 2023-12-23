@@ -11,6 +11,8 @@ from torch.cuda.amp import autocast
 
 from detectron2.projects.point_rend.point_features import point_sample
 
+from ovseg.feature_dim_reduction.savable_pca import SavablePCA
+
 
 def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
@@ -30,9 +32,7 @@ def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     return loss
 
 
-batch_dice_loss_jit = torch.jit.script(
-    batch_dice_loss
-)  # type: torch.jit.ScriptModule
+batch_dice_loss_jit = torch.jit.script(batch_dice_loss)  # type: torch.jit.ScriptModule
 
 
 def batch_sigmoid_ce_loss(inputs: torch.Tensor, targets: torch.Tensor):
@@ -77,6 +77,7 @@ class OpenVocabHungarianMatcher(nn.Module):
 
     def __init__(
         self,
+        feature_dim_reduction_path: str,
         cost_class: float = 1,
         cost_mask: float = 1,
         cost_dice: float = 1,
@@ -100,6 +101,8 @@ class OpenVocabHungarianMatcher(nn.Module):
 
         self.num_points = num_points
 
+        self.feature_dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
+
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
@@ -109,40 +112,59 @@ class OpenVocabHungarianMatcher(nn.Module):
 
         # Iterate through batch size
         for b in range(bs):
+            # prev class cost is obsolete
+            # ---
+            # out_prob = outputs["pred_logits"][b].softmax(
+            #     -1
+            # )  # [num_queries, num_classes]
+            # tgt_ids = targets[b]["labels"].clone()
 
-            out_prob = outputs["pred_logits"][b].softmax(
-                -1
-            )  # [num_queries, num_classes]
-            tgt_ids = targets[b]["labels"].clone()
+            # # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+            # # but approximate it in 1 - proba[target class].
+            # # The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # filter_ignore = tgt_ids == 253
+            # tgt_ids[filter_ignore] = 0
+            # cost_class = -out_prob[:, tgt_ids]
+            # cost_class[
+            #     :, filter_ignore
+            # ] = (
+            #     -1.0
+            # )  # for ignore classes pretend perfect match ;) TODO better worst class match?
 
-            # Compute the classification cost. Contrary to the loss, we don't use the NLL,
-            # but approximate it in 1 - proba[target class].
-            # The 1 is a constant that doesn't change the matching, it can be ommitted.
-            filter_ignore = tgt_ids == 253
-            tgt_ids[filter_ignore] = 0
-            cost_class = -out_prob[:, tgt_ids]
-            cost_class[
-                :, filter_ignore
-            ] = (
-                -1.0
-            )  # for ignore classes pretend perfect match ;) TODO better worst class match?
+            # ========================
+            feat_pred = outputs["pred_logits"][b]  # tens(n_inst_pred, dim_feat_reduced)
+            feat_target = targets[b]["instance_feats"]  # tens(n_inst_gt, dim_feat_full)
 
-            out_mask = outputs["pred_masks"][
-                b
-            ].T  # [num_queries, H_pred, W_pred]
+            # map target features down to lower dim
+            feat_target_reduced = (
+                torch.from_numpy(
+                    self.feature_dim_reduction.transform(feat_target.cpu().numpy())
+                )
+                .type(torch.float)
+                .to(feat_target.device)
+            )  # tens(n_inst_gt, dim_feat_reduced)
+
+            # compute cost from cosine similarity
+            feat_pred = F.normalize(feat_pred, p=2, dim=-1)
+            feat_target_reduced = F.normalize(feat_target_reduced, p=2, dim=-1)
+            cos_sim = feat_pred @ feat_target_reduced.T  # tens(n_inst_pred, n_inst_gt)
+            cost_class = (
+                1 - cos_sim
+            ) / 2  # cos sim in [-1, 1], so inversely map to [0, 1]
+            # ========================
+
+            out_mask = outputs["pred_masks"][b].T  # [num_queries, H_pred, W_pred]
             # gt masks are already padded when preparing target
             tgt_mask = targets[b][mask_type].to(out_mask)
 
             if self.num_points != -1:
-                point_idx = torch.randperm(
-                    tgt_mask.shape[1], device=tgt_mask.device
-                )[: int(self.num_points * tgt_mask.shape[1])]
+                point_idx = torch.randperm(tgt_mask.shape[1], device=tgt_mask.device)[
+                    : int(self.num_points * tgt_mask.shape[1])
+                ]
                 # point_idx = torch.randint(0, tgt_mask.shape[1], size=(self.num_points,), device=tgt_mask.device)
             else:
                 # sample all points
-                point_idx = torch.arange(
-                    tgt_mask.shape[1], device=tgt_mask.device
-                )
+                point_idx = torch.arange(tgt_mask.shape[1], device=tgt_mask.device)
 
             # out_mask = out_mask[:, None]
             # tgt_mask = tgt_mask[:, None]

@@ -265,7 +265,7 @@ def voxelize(
         # instance ids are left unchanged throughout voxelize collate,
         # so we can just pass the instance's clip vecs through the target
         # without any modification
-        instance_feature_vecs.append(sample[3])
+        instance_feature_vecs.append(torch.from_numpy(sample[3]))
 
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update(
@@ -357,7 +357,7 @@ def voxelize(
                     {
                         "labels": label_ids,
                         "masks": list_labels[batch_id] == label_ids.unsqueeze(1),
-                        "instance_feats": instance_feature_vecs,
+                        "instance_feats": instance_feature_vecs[batch_id],
                     }
                 )
         else:
@@ -537,7 +537,7 @@ def get_instance_masks(
                         "labels": label_ids,
                         "masks": masks,
                         "segment_mask": segment_masks,
-                        "instance_feats": instance_feature_vecs,
+                        "instance_feats": instance_feature_vecs[batch_id],
                     }
                 )
             else:
@@ -545,7 +545,7 @@ def get_instance_masks(
                     {
                         "labels": label_ids,
                         "masks": masks,
-                        "instance_feats": instance_feature_vecs,
+                        "instance_feats": instance_feature_vecs[batch_id],
                     }
                 )
         else:
@@ -557,7 +557,7 @@ def get_instance_masks(
                         "labels": l,
                         "masks": masks,
                         "segment_mask": segment_masks,
-                        "instance_feats": instance_feature_vecs,
+                        "instance_feats": instance_feature_vecs[batch_id],
                     }
                 )
             else:
@@ -565,7 +565,7 @@ def get_instance_masks(
                     {
                         "labels": l,
                         "masks": masks,
-                        "instance_feats": instance_feature_vecs,
+                        "instance_feats": instance_feature_vecs[batch_id],
                     }
                 )
     return target

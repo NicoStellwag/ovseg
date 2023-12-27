@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+
 from detectron2.utils.comm import get_world_size
 from detectron2.projects.point_rend.point_features import (
     get_uncertain_point_coords_with_randomness,
@@ -19,6 +20,9 @@ from models.misc import (
     is_dist_avail_and_initialized,
     nested_tensor_from_tensor_list,
 )
+
+
+from ovseg.feature_dim_reduction.savable_pca import SavablePCA
 
 
 def dice_loss(
@@ -61,16 +65,12 @@ def sigmoid_ce_loss(
     Returns:
         Loss tensor
     """
-    loss = F.binary_cross_entropy_with_logits(
-        inputs, targets, reduction="none"
-    )
+    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
 
     return loss.mean(1).sum() / num_masks
 
 
-sigmoid_ce_loss_jit = torch.jit.script(
-    sigmoid_ce_loss
-)  # type: torch.jit.ScriptModule
+sigmoid_ce_loss_jit = torch.jit.script(sigmoid_ce_loss)  # type: torch.jit.ScriptModule
 
 
 def calculate_uncertainty(logits):
@@ -99,6 +99,7 @@ class OpenVocabSetCriterion(nn.Module):
 
     def __init__(
         self,
+        feature_dim_reduction_path,
         num_classes,
         matcher,
         weight_dict,
@@ -140,33 +141,69 @@ class OpenVocabSetCriterion(nn.Module):
         self.oversample_ratio = oversample_ratio
         self.importance_sample_ratio = importance_sample_ratio
 
+        self.feature_dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
+
     def loss_labels(self, outputs, targets, indices, num_masks, mask_type):
         # todo this will have to be modified to cos dist or something
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
+        # assert "pred_logits" in outputs
+        # src_logits = outputs["pred_logits"].float()
+
+        # idx = self._get_src_permutation_idx(indices)
+        # target_classes_o = torch.cat(
+        #     [t["labels"][J] for t, (_, J) in zip(targets, indices)]
+        # )
+        # target_classes = torch.full(
+        #     src_logits.shape[:2],
+        #     self.num_classes,
+        #     dtype=torch.int64,
+        #     device=src_logits.device,
+        # )
+        # target_classes[idx] = target_classes_o
+
+        # loss_ce = F.cross_entropy(
+        #     src_logits.transpose(1, 2),
+        #     target_classes,
+        #     self.empty_weight,
+        #     ignore_index=253,
+        # )
+        # losses = {"loss_ce": loss_ce}
+        # return losses
+
+        # logits already in single batch tensor
         assert "pred_logits" in outputs
-        src_logits = outputs["pred_logits"].float()
+        raw_logits = outputs[
+            "pred_logits"
+        ].float()  # tens(bs, n_queries, feat_dim_reduced)
 
-        idx = self._get_src_permutation_idx(indices)
-        target_classes_o = torch.cat(
-            [t["labels"][J] for t, (_, J) in zip(targets, indices)]
-        )
-        target_classes = torch.full(
-            src_logits.shape[:2],
-            self.num_classes,
-            dtype=torch.int64,
-            device=src_logits.device,
-        )
-        target_classes[idx] = target_classes_o
+        # create single batch tensor containing
+        # dimensionality-reduced targets
+        raw_tgt_feats = torch.stack(
+            [
+                torch.from_numpy(
+                    self.feature_dim_reduction.transform(
+                        t["instance_feats"].cpu().numpy()
+                    )
+                )
+                .type(torch.float)
+                .to(raw_logits.device)
+                for t in targets
+            ]
+        )  # tens(bs, n_inst_gt, feat_dim_reduced)
 
-        loss_ce = F.cross_entropy(
-            src_logits.transpose(1, 2),
-            target_classes,
-            self.empty_weight,
-            ignore_index=253,
-        )
-        losses = {"loss_ce": loss_ce}
+        # get matching instances
+        src_idx = self._get_src_permutation_idx(indices)
+        tgt_idx = self._get_tgt_permutation_idx(indices)
+        logits = raw_logits[src_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
+        target_feats = raw_tgt_feats[tgt_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
+
+        # compute cosine distance loss
+        logits = F.normalize(logits, p=2, dim=-1)
+        target_feats = F.normalize(target_feats, p=2, dim=-1)
+        cos_dists = 1 - (logits * target_feats).sum(dim=-1)  # tens(bs * n_inst_gt)
+        losses = {"loss_cos_dist": cos_dists.mean()}
         return losses
 
     def loss_masks(self, outputs, targets, indices, num_masks, mask_type):
@@ -285,9 +322,7 @@ class OpenVocabSetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        outputs_without_aux = {
-            k: v for k, v in outputs.items() if k != "aux_outputs"
-        }
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets, mask_type)
@@ -307,9 +342,7 @@ class OpenVocabSetCriterion(nn.Module):
         losses = {}
         for loss in self.losses:
             losses.update(
-                self.get_loss(
-                    loss, outputs, targets, indices, num_masks, mask_type
-                )
+                self.get_loss(loss, outputs, targets, indices, num_masks, mask_type)
             )
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.

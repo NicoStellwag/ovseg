@@ -7,7 +7,7 @@
 feature_dim_reduction_path: /mnt/hdd/self_training_initial/pca.pkl
 
 # splits
-train_mode: train
+train_mode: train_validation
 validation_mode: validation
 test_mode: validation # test  # validation
 
@@ -18,7 +18,6 @@ add_colors: true # 3dim
 add_normals: false # 3dim
 in_channels: 3 # in_channels = 3 * (add_normals + add_colors + add_raw_coordinates)
 num_labels: 200
-# num_labels: 41
 add_instance: ${general.add_instance}
 task: ${general.task}
 

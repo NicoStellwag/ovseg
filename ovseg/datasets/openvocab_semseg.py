@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple, Union
 from random import choice
 from copy import deepcopy
 from random import randrange
+from math import isnan
 
 
 import numpy
@@ -384,11 +385,22 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
     def map2color(self, labels):
         """
         list of labels to list of their respective colors
+
+        modification for feature vecs instead of labels:
+        if labels are NaN (which is the case for this dataset),
+        just draw random colors from the color map
         """
         output_colors = list()
+        colmap = None
 
-        for label in labels:
-            output_colors.append(self.color_map[label])
+        for l in labels:
+            if isnan(l):
+                if not colmap:
+                    colmap = self.color_map.copy()
+                k = choice(list(colmap.keys()))
+                output_colors.append(colmap.pop(k))
+            else:
+                output_colors.append(self.color_map[l])
 
         return torch.tensor(output_colors)
 
@@ -429,15 +441,18 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         if not self.add_colors:
             color = np.ones((len(color), 3))
 
-
         # ===========================
         # replace labels with clip vectors
         # labels at this point: pointwise tuples (segmentation class, instance)
         scene_name = self.data[idx]["raw_filepath"].split("/")[-2]
-        instances_file = os.path.join(self.ground_truth_dir, scene_name, self.point_instances_file)
-        labels_file = os.path.join(self.ground_truth_dir, scene_name, self.instance_labels_file)
-        pointwise_instances = np.load(instances_file) # (n_points, n_instances) one hot
-        instance_gt_feature_vecs = np.load(labels_file) # (n_instances, clip_dim)
+        instances_file = os.path.join(
+            self.ground_truth_dir, scene_name, self.point_instances_file
+        )
+        labels_file = os.path.join(
+            self.ground_truth_dir, scene_name, self.instance_labels_file
+        )
+        pointwise_instances = np.load(instances_file)  # (n_points, n_instances) one hot
+        instance_gt_feature_vecs = np.load(labels_file)  # (n_instances, clip_dim)
 
         # convert instances from one-hot to numerical indices
         no_instance_points = np.sum(pointwise_instances, axis=1) == 0

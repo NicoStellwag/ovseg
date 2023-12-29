@@ -174,30 +174,32 @@ class OpenVocabSetCriterion(nn.Module):
 
         # logits already in single batch tensor
         assert "pred_logits" in outputs
-        raw_logits = outputs[
+        all_logits = outputs[
             "pred_logits"
         ].float()  # tens(bs, n_queries, feat_dim_reduced)
 
         # create single batch tensor containing
         # dimensionality-reduced targets
-        raw_tgt_feats = torch.stack(
-            [
-                torch.from_numpy(
-                    self.feature_dim_reduction.transform(
-                        t["instance_feats"].cpu().numpy()
-                    )
-                )
-                .type(torch.float)
-                .to(raw_logits.device)
-                for t in targets
-            ]
-        )  # tens(bs, n_inst_gt, feat_dim_reduced)
+        all_tgt_feats = [
+            torch.from_numpy(
+                self.feature_dim_reduction.transform(t["instance_feats"].cpu().numpy())
+            )
+            .type(torch.float)
+            .to(all_logits.device)
+            for t in targets
+        ]  # [tens(n_inst_gt, feat_dim_reduced), ...] * bs
 
         # get matching instances
         src_idx = self._get_src_permutation_idx(indices)
-        tgt_idx = self._get_tgt_permutation_idx(indices)
-        logits = raw_logits[src_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
-        target_feats = raw_tgt_feats[tgt_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
+        logits = all_logits[src_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
+        tgt_batch_idx, tgt_inst_idx = self._get_tgt_permutation_idx(indices)
+        target_feats = torch.stack(
+            [
+                all_tgt_feats[i_batch][i_inst]
+                for i_batch, i_inst in zip(tgt_batch_idx, tgt_inst_idx)
+            ]
+        )  # tens(bs * n_inst_gt, feat_dim_reduced)
+        print(logits.shape, target_feats.shape)
 
         # compute cosine distance loss
         logits = F.normalize(logits, p=2, dim=-1)

@@ -461,6 +461,7 @@ def get_instance_masks(
     for batch_id in range(len(list_labels)):
         label_ids = []
         masks = []
+        filtered_instance_feature_vecs = []
         segment_masks = []
         instance_ids = list_labels[batch_id][:, 1].unique()
 
@@ -487,6 +488,9 @@ def get_instance_masks(
             ):
                 continue
 
+            filtered_instance_feature_vecs.append(
+                instance_feature_vecs[batch_id][instance_id]
+            )
             label_ids.append(label_id)
             masks.append(list_labels[batch_id][:, 1] == instance_id)
 
@@ -504,6 +508,7 @@ def get_instance_masks(
             return list()
 
         # stack
+        filtered_instance_feature_vecs = torch.stack(filtered_instance_feature_vecs)
         label_ids = torch.stack(label_ids)
         masks = torch.stack(masks)
         if list_segments:
@@ -537,7 +542,7 @@ def get_instance_masks(
                         "labels": label_ids,
                         "masks": masks,
                         "segment_mask": segment_masks,
-                        "instance_feats": instance_feature_vecs[batch_id],
+                        "instance_feats": filtered_instance_feature_vecs,
                     }
                 )
             else:
@@ -545,7 +550,7 @@ def get_instance_masks(
                     {
                         "labels": label_ids,
                         "masks": masks,
-                        "instance_feats": instance_feature_vecs[batch_id],
+                        "instance_feats": filtered_instance_feature_vecs,
                     }
                 )
         else:
@@ -557,7 +562,7 @@ def get_instance_masks(
                         "labels": l,
                         "masks": masks,
                         "segment_mask": segment_masks,
-                        "instance_feats": instance_feature_vecs[batch_id],
+                        "instance_feats": filtered_instance_feature_vecs,
                     }
                 )
             else:
@@ -565,7 +570,7 @@ def get_instance_masks(
                     {
                         "labels": l,
                         "masks": masks,
-                        "instance_feats": instance_feature_vecs[batch_id],
+                        "instance_feats": filtered_instance_feature_vecs,
                     }
                 )
     return target

@@ -457,7 +457,7 @@ def mean_instance_feature(segment_featues, segmentwise_instances):
         instance = np.argmax(segmentwise_instances[i])
         aggr_labels[instance] += s_feat
         counts[instance] += 1
-    return aggr_labels / counts
+    return aggr_labels / (counts + 1e-8)
 
 
 @hydra.main(config_path="../conf", config_name="config_base_instance_segmentation.yaml")
@@ -523,9 +523,18 @@ def main(cfg):
                 feats_2d, segment_ids, segment_connectivity, cfg
             )
 
+            # load ground truth instance labels and remap them
+            # to a consecutive sequence starting at 0
             gt_instances = (
                 sample["gt_instance_labels"][0].numpy().astype(int)
             )  # np(n_points,)
+            unique_gt_instances = np.unique(gt_instances[gt_instances >= 0])
+            gt_instance_to_consecutive_id = {
+                l: i for i, l in enumerate(unique_gt_instances)
+            }
+            gt_instance_to_consecutive_id[-1] = -1
+            for i in range(len(gt_instances)):
+                gt_instances[i] = gt_instance_to_consecutive_id[gt_instances[i]]
 
             # assign labels to segments by taking the label
             # that occurs for most points (there's only a small
@@ -557,7 +566,7 @@ def main(cfg):
             pointwise_instances[np.arange(n_points), gt_instances] = 1
             pointwise_instances[gt_instances == -1] = 0
 
-        # get labels by taking mean 2d feature over instances
+        # get labels by taking mean 2d feature over segments of instances
         labels = mean_instance_feature(
             segment_featues=segment_feats_2d.cpu().numpy(),
             segmentwise_instances=segmentwise_instances,

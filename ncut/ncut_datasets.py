@@ -230,6 +230,7 @@ class NormalizedCutDataset(Dataset):
     def __init__(
         self,
         scannet_base_dir,
+        scannet_preprocessed_base_dir,
         mode,
         segments_base_dir,
         base_dir_3d,
@@ -240,6 +241,7 @@ class NormalizedCutDataset(Dataset):
         features_filename_2d,
     ):
         self.scannet_base_dir = scannet_base_dir
+        self.scannet_preprocessed_base_dir = scannet_preprocessed_base_dir
         self.segments_base_dir = segments_base_dir
         self.base_dir_3d = base_dir_3d
         self.coords_filename_3d = coords_filename_3d
@@ -247,6 +249,7 @@ class NormalizedCutDataset(Dataset):
         self.base_dir_2d = base_dir_2d
         self.coords_filename_2d = coords_filename_2d
         self.features_filename_2d = features_filename_2d
+        self.mode = mode
 
         # read scenes from split file
         assert mode in ["train", "val", "test"], "mode must be train, val, or test"
@@ -280,14 +283,27 @@ class NormalizedCutDataset(Dataset):
             segments_file_dict["segConnectivity"], dtype=int
         )
 
-        return {
+        sample = {
             "coords": coords,  # (n_points, 3), float
             "feats_3d": feats_3d,  # (n_points, dim_feats_3d), float
             "feats_2d": feats_2d,  # (n_points, dim_feats_2d), float
             "segment_ids": segment_ids,  # (n_points,), int
             "segment_connectivity": segment_connectivity,  # (-1, 2), int (neighborhood edges of segments)
-            "scene_name": self.scenes[idx], # str wrapped in list to make it batchable
+            "scene_name": self.scenes[idx],  # str wrapped in list to make it batchable
         }
+
+        # if mode is validation we want ground truth instances
+        if self.mode == "val":
+            points_file = os.path.join(
+                self.scannet_preprocessed_base_dir,
+                "validation",
+                self.scenes[idx].replace("scene", "") + ".npy",
+            )
+            points = np.load(points_file)
+            instance_labels = points[:, -1]
+            sample["gt_instance_labels"] = instance_labels  # np(n_points,)
+
+        return sample
 
     @staticmethod
     def dataloader_from_hydra(datacfg: DictConfig, only_first=False):

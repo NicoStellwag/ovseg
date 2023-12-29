@@ -472,7 +472,7 @@ def main(cfg):
     )
 
     device = torch.device("cuda:0")
-    loader = NormalizedCutDataset.dataloader_from_hydra(cfg.ncut.data, only_first=True)
+    loader = NormalizedCutDataset.dataloader_from_hydra(cfg.ncut.data, only_first=False)
 
     n_scenes = len(loader)
     for i_scene, sample in enumerate(loader):
@@ -487,39 +487,80 @@ def main(cfg):
         )  # tens(-1, 2)
         scene_name = sample["scene_name"][0]
 
-        # segment scene using normalized cut
-        (
-            bipartitions,  # np(n_segments, n_instances) col-wise one hot representation of instance
+        if cfg.ncut.data.dataset.mode == "train":  # for train mode use ncut masks
+            # segment scene using normalized cut
             (
-                segment_feats_3d,  # tens(n_segments, dim_feat_3d)
-                segment_feats_2d,  # tens(n_segments, dim_feat_2d)
-            ),
-        ) = segment_scene(
-            coords,
-            feats_3d,
-            feats_2d,
-            cfg,
-            segment_ids,
-            segment_connectivity,
-        )
+                bipartitions,  # np(n_segments, n_instances) col-wise one hot representation of instance
+                (
+                    segment_feats_3d,  # tens(n_segments, dim_feat_3d)
+                    segment_feats_2d,  # tens(n_segments, dim_feat_2d)
+                ),
+            ) = segment_scene(
+                coords,
+                feats_3d,
+                feats_2d,
+                cfg,
+                segment_ids,
+                segment_connectivity,
+            )
 
-        # Calculate inverse segment mapping
-        unique_segments = segment_ids.unique()
-        segment_indices = torch.zeros_like(segment_ids)
-        for i, segment_id in enumerate(unique_segments):
-            segment_mask = segment_ids == segment_id
-            segment_indices[segment_mask] = i
-        segment_indices = segment_indices.cpu().numpy()
+            # Calculate inverse segment mapping
+            unique_segments = segment_ids.unique()
+            segment_indices = torch.zeros_like(segment_ids)
+            for i, segment_id in enumerate(unique_segments):
+                segment_mask = segment_ids == segment_id
+                segment_indices[segment_mask] = i
+            segment_indices = segment_indices.cpu().numpy()
 
-        # Update bipartitions to be on point level instead of segment level
-        pointwise_instances = bipartitions.T[segment_indices].astype(
-            int
-        )  # np(n_points, n_instances) row-wise one hot representation of instances
+            # Update bipartitions to be on point level instead of segment level
+            segmentwise_instances = bipartitions.T
+            pointwise_instances = segmentwise_instances[segment_indices].astype(
+                int
+            )  # np(n_points, n_instances) row-wise one hot representation of instances
+        else:  # for val use ground truth masks
+            # aggregate features over segments
+            segment_feats_2d, unique_segments = aggregate_features(
+                feats_2d, segment_ids, segment_connectivity, cfg
+            )
+
+            gt_instances = (
+                sample["gt_instance_labels"][0].numpy().astype(int)
+            )  # np(n_points,)
+
+            # assign labels to segments by taking the label
+            # that occurs for most points (there's only a small
+            # number of outlier points so this should be no problem)
+            n_segments = unique_segments.shape[0]
+            n_instances = np.unique(gt_instances[gt_instances != -1]).shape[0]
+            segment_instance_counts = np.zeros(
+                shape=(n_segments, n_instances)
+            )  # np(n_segments, n_instances)
+            seg_id_to_unique_seg_index = {}  # cache for some speed up
+            for i, inst in enumerate(gt_instances):
+                if inst == -1:
+                    continue
+                seg_id = segment_ids[i]
+                if seg_id in seg_id_to_unique_seg_index:
+                    unique_seg_idx = seg_id_to_unique_seg_index[seg_id]
+                else:
+                    unique_seg_idx = (unique_segments == seg_id).nonzero().item()
+                    seg_id_to_unique_seg_index[seg_id] = unique_seg_idx
+                segment_instance_counts[unique_seg_idx, inst] = 1
+            segmentwise_instances = np.zeros_like(segment_instance_counts, dtype=int)
+            segmentwise_instances[
+                np.arange(n_segments), np.argmax(segment_instance_counts, axis=1)
+            ] = 1
+
+            # we also need a one hot pointwise instance representation for saving
+            n_points = gt_instances.shape[0]
+            pointwise_instances = np.zeros(shape=(n_points, n_instances), dtype=int)
+            pointwise_instances[np.arange(n_points), gt_instances] = 1
+            pointwise_instances[gt_instances == -1] = 0
 
         # get labels by taking mean 2d feature over instances
         labels = mean_instance_feature(
             segment_featues=segment_feats_2d.cpu().numpy(),
-            segmentwise_instances=bipartitions.T,
+            segmentwise_instances=segmentwise_instances,
         )  # np(n_instances, dim_feat_2d)
 
         # save everything as np arrays

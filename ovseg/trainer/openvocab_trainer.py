@@ -24,11 +24,14 @@ import MinkowskiEngine as ME
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 from models.metrics import IoU
 import random
 import colorsys
 from typing import List, Tuple
 import functools
+
+from ovseg.feature_dim_reduction.savable_pca import SavablePCA
 
 
 @functools.lru_cache(20)
@@ -85,6 +88,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             "loss_mask": matcher.cost_mask,
             "loss_dice": matcher.cost_dice,
         }
+        # feature dim reduction
+        self.feature_dim_reduction = SavablePCA.from_file(
+            config.data.feature_dim_reduction_path
+        )
 
         aux_weight_dict = {}
         for i in range(self.model.num_levels * self.model.num_decoders):
@@ -110,7 +117,8 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         # misc
         self.labels_info = dict()
 
-    # * nothing changed
+    # * rename the logits to feature vecs to prevent
+    # * confusion with fake logits we need for validation
     def forward(self, x, point2segment=None, raw_coordinates=None, is_eval=False):
         with self.optional_freeze():
             x = self.model(
@@ -119,11 +127,36 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 raw_coordinates=raw_coordinates,
                 is_eval=is_eval,
             )
+        x["pred_features"] = x.pop("pred_logits")
+        for aux_x in x["aux_outputs"]:
+            aux_x["pred_features"] = aux_x.pop("pred_logits")
         return x
+
+    def dim_reduce(self, high_dim_feats):
+        """
+        dimensionality-reduce features tens(n_feats, feat_dim_high)
+        to lower dim features tens(n_feats, feat_dim_low)
+        """
+        high_dim_feats_np = high_dim_feats.cpu().numpy()
+        low_dim_feats_np = self.feature_dim_reduction.transform(high_dim_feats_np)
+        low_dim_feats = torch.from_numpy(low_dim_feats_np)
+        low_dim_feats = low_dim_feats.type(torch.float)
+        low_dim_feats = low_dim_feats.to(high_dim_feats.device)
+        return low_dim_feats
+
+    def dim_reduce_target(self, target):
+        """
+        apply dimensionality reduction to a dataset target
+        """
+        for i in range(len(target)):
+            feats = target[i]["instance_feats"]  # tens(n_inst_gt, dim_feat_full)
+            target[i]["instance_feats"] = self.dim_reduce(feats)
+        return target
 
     # * only log name of loss changed
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
+        target = self.dim_reduce_target(target)
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -422,6 +455,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         calls eval_instance_step
         """
         data, target, file_names = batch
+        target = self.dim_reduce_target(target)
         inverse_maps = data.inverse_maps
         target_full = data.target_full
         original_colors = data.original_colors
@@ -607,10 +641,32 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         prediction = output["aux_outputs"]
         prediction.append(
             {
-                "pred_logits": output["pred_logits"],
+                "pred_features": output["pred_features"],
                 "pred_masks": output["pred_masks"],
             }
         )
+
+        # ! tmp test cosine sims
+        # gt feats
+        gt_feats = target_low_res[0]["instance_feats"]
+
+        # get label feats
+        labels = target_low_res[0]["labels"]
+        remapped_labels = self.validation_dataset._remap_model_output(
+            labels.cpu() + label_offset
+        )
+        label_feats = self.validation_dataset.map2features(
+            remapped_labels, gt_feats.device
+        )
+
+        # compute cosine sim
+        gt_feats = F.normalize(
+            gt_feats, p=2, dim=-1
+        )  # label feats are already normalized
+        cos_sims = gt_feats @ label_feats.T  # diag should be high values, rest low
+        print(torch.round(cos_sims[:5, :5], decimals=3))
+
+        assert False
 
         # compute softmax over logits
         # todo do we still need this if we compute fake logits via cos sim?

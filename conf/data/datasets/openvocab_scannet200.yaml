@@ -6,6 +6,7 @@ train_dataset:
   ground_truth_dir: /mnt/hdd/self_training_initial
   point_instances_file: pointwise_instances.npy
   instance_labels_file: instance_labels.npy
+  feature_dim_reduction_path: ${data.feature_dim_reduction_path}
   image_augmentations_path: conf/augmentation/albumentations_aug.yaml
   volume_augmentations_path: conf/augmentation/volumentations_aug.yaml
   label_db_filepath: /mnt/hdd/scannet200_preprocessed/label_database.yaml
@@ -42,6 +43,7 @@ validation_dataset:
   ground_truth_dir: /mnt/hdd/self_training_initial
   point_instances_file: pointwise_instances.npy
   instance_labels_file: instance_labels.npy
+  feature_dim_reduction_path: ${data.feature_dim_reduction_path}
   image_augmentations_path: null
   volume_augmentations_path: null
   label_db_filepath: /mnt/hdd/scannet200_preprocessed/label_database.yaml

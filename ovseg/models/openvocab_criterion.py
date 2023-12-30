@@ -22,9 +22,6 @@ from models.misc import (
 )
 
 
-from ovseg.feature_dim_reduction.savable_pca import SavablePCA
-
-
 def dice_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
@@ -99,7 +96,6 @@ class OpenVocabSetCriterion(nn.Module):
 
     def __init__(
         self,
-        feature_dim_reduction_path,
         num_classes,
         matcher,
         weight_dict,
@@ -141,10 +137,7 @@ class OpenVocabSetCriterion(nn.Module):
         self.oversample_ratio = oversample_ratio
         self.importance_sample_ratio = importance_sample_ratio
 
-        self.feature_dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
-
     def loss_labels(self, outputs, targets, indices, num_masks, mask_type):
-        # todo this will have to be modified to cos dist or something
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
@@ -173,38 +166,33 @@ class OpenVocabSetCriterion(nn.Module):
         # return losses
 
         # logits already in single batch tensor
-        assert "pred_logits" in outputs
-        all_logits = outputs[
-            "pred_logits"
-        ].float()  # tens(bs, n_queries, feat_dim_reduced)
+        assert "pred_features" in outputs
+        all_pred_features = outputs[
+            "pred_features"
+        ].float()  # tens(bs, n_queries, feat_dim)
 
-        # create single batch tensor containing
-        # dimensionality-reduced targets
+        # create list of target tensors
         all_tgt_feats = [
-            torch.from_numpy(
-                self.feature_dim_reduction.transform(t["instance_feats"].cpu().numpy())
-            )
-            .type(torch.float)
-            .to(all_logits.device)
-            for t in targets
-        ]  # [tens(n_inst_gt, feat_dim_reduced), ...] * bs
+            t["instance_feats"] for t in targets
+        ]  # [tens(n_inst_gt, feat_dim), ...] * bs
 
         # get matching instances
         src_idx = self._get_src_permutation_idx(indices)
-        logits = all_logits[src_idx]  # tens(bs * n_inst_gt, feat_dim_reduced)
+        pred_features = all_pred_features[src_idx]  # tens(bs * n_inst_gt, feat_dim)
         tgt_batch_idx, tgt_inst_idx = self._get_tgt_permutation_idx(indices)
         target_feats = torch.stack(
             [
                 all_tgt_feats[i_batch][i_inst]
                 for i_batch, i_inst in zip(tgt_batch_idx, tgt_inst_idx)
             ]
-        )  # tens(bs * n_inst_gt, feat_dim_reduced)
-        print(logits.shape, target_feats.shape)
+        )  # tens(bs * n_inst_gt, feat_dim)
 
         # compute cosine distance loss
-        logits = F.normalize(logits, p=2, dim=-1)
+        pred_features = F.normalize(pred_features, p=2, dim=-1)
         target_feats = F.normalize(target_feats, p=2, dim=-1)
-        cos_dists = 1 - (logits * target_feats).sum(dim=-1)  # tens(bs * n_inst_gt)
+        cos_dists = 1 - (pred_features * target_feats).sum(
+            dim=-1
+        )  # tens(bs * n_inst_gt)
         losses = {"loss_cos_dist": cos_dists.mean()}
         return losses
 
@@ -331,10 +319,13 @@ class OpenVocabSetCriterion(nn.Module):
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_masks = sum(len(t["labels"]) for t in targets)
+        some_output = next(iter(outputs.values()))
         num_masks = torch.as_tensor(
             [num_masks],
             dtype=torch.float,
-            device=next(iter(outputs.values())).device,
+            device=some_output[0].device
+            if isinstance(some_output, list)
+            else some_output.device,
         )
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks)

@@ -12,6 +12,8 @@ from math import isnan
 
 import numpy
 import torch
+import clip
+import torch.nn.functional as F
 from datasets.random_cuboid import RandomCuboid
 
 import albumentations as A
@@ -26,6 +28,8 @@ from datasets.scannet200.scannet200_constants import (
     SCANNET_COLOR_MAP_200,
     SCANNET_COLOR_MAP_20,
 )
+
+from ovseg.feature_dim_reduction.savable_pca import SavablePCA
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +50,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         ground_truth_dir: str = "/mnt/hdd/self_training_initial",
         point_instances_file: str = "pointwise_instances.npy",
         instance_labels_file: str = "instance_labels.npy",
+        feature_dim_reduction_path: str = "/mnt/hdd/self_training_initial/pca.pkl",
         label_db_filepath: Optional[
             str
         ] = "configs/scannet_preprocessing/label_database.yaml",
@@ -236,6 +241,33 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 Path(label_db_filepath).parent / "instance_database.yaml"
             )
 
+        # modification: define map of label id to feature space representation
+        # ===========================
+        # load clip model and dimensionality reduction
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        clip_model, _ = clip.load("ViT-B/32", device=device)
+        dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
+
+        # get clip embeddings from label text
+        text_labels = [i["name"] for i in self._labels.values()]
+        label_tokens = clip.tokenize(text_labels).to(device)
+        with torch.no_grad():
+            label_feats = clip_model.encode_text(label_tokens)  # tens(n_labels, 512)
+            label_feats = F.normalize(
+                label_feats, p=2, dim=-1
+            )  # dim reduction expects normalized
+            label_feats = label_feats.cpu().numpy()
+
+        # apply dimensionality reduction
+        # label_feats = dim_reduction.transform(label_feats)
+        # label_feats = F.normalize(torch.from_numpy(label_feats), p=2, dim=-1).numpy()
+
+        # make them indexable by label ids
+        self.label_feature_map = {
+            k: label_feats[i] for i, k in enumerate(self._labels.keys())
+        }  # label id -> np(512,)
+        # ===========================
+
         # normalize color channels
         if self.dataset_name == "s3dis":
             color_mean_std = color_mean_std.replace(
@@ -409,6 +441,17 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 output_colors.append(self.color_map[l])
 
         return torch.tensor(output_colors)
+
+    def map2features(self, labels, device):
+        """
+        map a list or tensor of semantic labels sh(n_labels,)
+        to their feature space representations tens(n_labels, dim_feat)
+        """
+        feats = []
+        for l in labels:
+            assert not isnan(l), "label must not be NaN"
+            feats.append(torch.from_numpy(self.label_feature_map[l]).float())
+        return torch.stack(feats).to(device)
 
     def __len__(self):
         if self.is_tta:

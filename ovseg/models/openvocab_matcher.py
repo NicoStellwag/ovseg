@@ -11,8 +11,6 @@ from torch.cuda.amp import autocast
 
 from detectron2.projects.point_rend.point_features import point_sample
 
-from ovseg.feature_dim_reduction.savable_pca import SavablePCA
-
 
 def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
@@ -77,7 +75,6 @@ class OpenVocabHungarianMatcher(nn.Module):
 
     def __init__(
         self,
-        feature_dim_reduction_path: str,
         cost_class: float = 1,
         cost_mask: float = 1,
         cost_dice: float = 1,
@@ -101,12 +98,10 @@ class OpenVocabHungarianMatcher(nn.Module):
 
         self.num_points = num_points
 
-        self.feature_dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
-
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
-        bs, num_queries = outputs["pred_logits"].shape[:2]
+        bs, num_queries = outputs["pred_features"].shape[:2]
 
         indices = []
 
@@ -132,22 +127,13 @@ class OpenVocabHungarianMatcher(nn.Module):
             # )  # for ignore classes pretend perfect match ;) TODO better worst class match?
 
             # ========================
-            feat_pred = outputs["pred_logits"][b]  # tens(n_inst_pred, dim_feat_reduced)
-            feat_target = targets[b]["instance_feats"]  # tens(n_inst_gt, dim_feat_full)
-
-            # map target features down to lower dim
-            feat_target_reduced = (
-                torch.from_numpy(
-                    self.feature_dim_reduction.transform(feat_target.cpu().numpy())
-                )
-                .type(torch.float)
-                .to(feat_target.device)
-            )  # tens(n_inst_gt, dim_feat_reduced)
+            feat_pred = outputs["pred_features"][b]  # tens(n_inst_pred, dim_feat)
+            feat_target = targets[b]["instance_feats"]  # tens(n_inst_gt, dim_feat)
 
             # compute cost from cosine similarity
             feat_pred = F.normalize(feat_pred, p=2, dim=-1)
-            feat_target_reduced = F.normalize(feat_target_reduced, p=2, dim=-1)
-            cos_sim = feat_pred @ feat_target_reduced.T  # tens(n_inst_pred, n_inst_gt)
+            feat_target = F.normalize(feat_target, p=2, dim=-1)
+            cos_sim = feat_pred @ feat_target.T  # tens(n_inst_pred, n_inst_gt)
             cost_class = (
                 1 - cos_sim
             ) / 2  # cos sim in [-1, 1], so inversely map to [0, 1]

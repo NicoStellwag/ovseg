@@ -40,7 +40,7 @@ def visualize_instances(coords, pointwise_instances, filename):
     visualize_3d_feats(coords, instance_color_map, filename)
 
 
-def visualize_3d_feats(coords, feats, save_path=None):
+def visualize_3d_feats(coords, feats, save_path=None, hovertext=None):
     """
     Visualize features.
     If the feature vector has more than 3 dims, PCA is applied to map it down to 3.
@@ -64,13 +64,24 @@ def visualize_3d_feats(coords, feats, save_path=None):
     pcd.points = o3d.utility.Vector3dVector(coords)
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
-    scatter = go.Scatter3d(
-        x=coords[:, 0],
-        y=coords[:, 1],
-        z=coords[:, 2],
-        mode="markers",
-        marker=dict(size=2, color=colors, opacity=0.8),
-    )
+    if hovertext:
+        scatter = go.Scatter3d(
+            x=coords[:, 0],
+            y=coords[:, 1],
+            z=coords[:, 2],
+            mode="markers",
+            marker=dict(size=2, color=colors, opacity=0.8),
+            hoverinfo="text",
+            hovertext=hovertext,
+        )
+    else:
+        scatter = go.Scatter3d(
+            x=coords[:, 0],
+            y=coords[:, 1],
+            z=coords[:, 2],
+            mode="markers",
+            marker=dict(size=2, color=colors, opacity=0.8),
+        )
 
     fig = go.Figure(data=[scatter])
 

@@ -1,6 +1,5 @@
 # @package _group_
 _target_: ovseg.models.openvocab_matcher.OpenVocabHungarianMatcher
-feature_dim_reduction_path: ${data.feature_dim_reduction_path}
 cost_class: 2.
 cost_mask: 5.
 cost_dice: 2.

@@ -1,6 +1,5 @@
 # @package _group_
 _target_: ovseg.models.openvocab_criterion.OpenVocabSetCriterion
-feature_dim_reduction_path: ${data.feature_dim_reduction_path}
 num_classes: ${general.num_targets}
 eos_coef: 0.1
 losses:

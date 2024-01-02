@@ -620,8 +620,8 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         return score, result_pred_mask, classes, heatmap
 
-    # todo - class logits have to be replaced with cos similarities to
-    # todo - transformed text embeddings of classes
+    # * add pseudo logit computation
+    # * get num classes from config instead of model
     def eval_instance_step(
         self,
         output,
@@ -646,30 +646,35 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             }
         )
 
-        # ! tmp test cosine sims
-        # gt feats
-        gt_feats = target_low_res[0]["instance_feats"]
+        # compute pseudo class logits as cosine similarities
+        # ===============
+        # label feats
+        all_labels = np.arange(self.config.data.num_labels)
+        all_label_ids = self.validation_dataset._remap_model_output(all_labels)
+        all_label_feats = self.validation_dataset.map2features(
+            labels=all_label_ids,
+            device=prediction[self.decoder_id]["pred_features"].device,
+        )  # already unit vecs - tens(n_labels, feat_dim)
 
-        # get label feats
-        labels = target_low_res[0]["labels"]
-        remapped_labels = self.validation_dataset._remap_model_output(
-            labels.cpu() + label_offset
-        )
-        label_feats = self.validation_dataset.map2features(
-            remapped_labels, gt_feats.device
-        )
+        # predicted feats
+        pred_feats = prediction[self.decoder_id]["pred_features"].squeeze(
+            0
+        )  # tens(n_queries, feat_dim)
+        pred_feats = F.normalize(pred_feats, p=2, dim=-1)
 
-        # compute cosine sim
-        gt_feats = F.normalize(
-            gt_feats, p=2, dim=-1
-        )  # label feats are already normalized
-        cos_sims = gt_feats @ label_feats.T  # diag should be high values, rest low
-        print(torch.round(cos_sims[:5, :5], decimals=3))
-
-        assert False
+        # logits become cos sims
+        cos_sims = pred_feats @ all_label_feats.T  # tens(n_queries, n_labels)
+        prediction[self.decoder_id]["pred_logits"] = (
+            torch.hstack(  # no class logit is last
+                [
+                    cos_sims,
+                    torch.zeros((cos_sims.shape[0], 1), device=cos_sims.device),
+                ]
+            )
+        ).unsqueeze(0)
+        # ===============
 
         # compute softmax over logits
-        # todo do we still need this if we compute fake logits via cos sim?
         prediction[self.decoder_id]["pred_logits"] = torch.functional.F.softmax(
             prediction[self.decoder_id]["pred_logits"], dim=-1
         )[..., :-1]
@@ -746,14 +751,14 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         torch.stack(new_preds["pred_logits"]).cpu(),
                         torch.stack(new_preds["pred_masks"]).T,
                         len(new_preds["pred_logits"]),
-                        self.model.num_classes - 1,
+                        self.config.data.num_labels,
                     )
                 else:
                     scores, masks, classes, heatmap = self.get_mask_and_scores(
                         prediction[self.decoder_id]["pred_logits"][bid].detach().cpu(),
                         masks,
                         prediction[self.decoder_id]["pred_logits"][bid].shape[0],
-                        self.model.num_classes - 1,
+                        self.config.data.num_labels,
                     )
 
                 masks = self.get_full_res_mask(
@@ -989,7 +994,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     )
 
             # export predictions if specified
-            # todo maybe save as dataset format here (or write second dataset)
             if self.config.general.export:
                 if self.validation_dataset.dataset_name == "stpls3d":
                     scan_id, _, _, crop_id = file_names[bid].split("_")

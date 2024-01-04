@@ -267,7 +267,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         fmt="%d",
                     )
                     np.save(
-                        f"{pred_mask_path}/{file_name}_{real_id}_{feature}.npy", feature
+                        f"{pred_mask_path}/{file_name}_{real_id}_feature.npy", feature
                     )
                     fout.write(
                         f"pred_mask/{file_name}_{real_id}.txt {pred_class} {score}\n"
@@ -627,8 +627,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             )
 
         labels_per_query = labels[topk_indices]
-        features = mask_feats.flatten(0, 1)[topk_indices]
-        topk_indices = topk_indices // num_classes
+        topk_indices = topk_indices.div(
+            num_classes, rounding_mode="floor"
+        )  # convert to query-wise
+        features = mask_feats[topk_indices]
         mask_pred = mask_pred[:, topk_indices]
 
         result_pred_mask = (mask_pred > 0).float()

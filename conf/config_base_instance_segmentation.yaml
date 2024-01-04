@@ -12,7 +12,8 @@ general:
   save_visualizations: false
   visualization_point_size: 20
   decoder_id: -1
-  export: false
+  export: true
+  export_root_path: /mnt/hdd/eval_output
   use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100
   project_name: ovseg

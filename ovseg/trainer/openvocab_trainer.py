@@ -224,6 +224,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         self.log_dict(logs)
+        self.log("train_epoch", self.trainer.current_epoch)
         return sum(losses.values())
 
     # * nothing changed
@@ -231,8 +232,18 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         return self.eval_step(batch, batch_idx)
 
     # todo change this to export clip vecs
-    def export(self, pred_masks, scores, pred_classes, file_names, decoder_id):
-        root_path = f"eval_output"
+    def export(
+        self,
+        pred_masks,
+        scores,
+        pred_classes,
+        pred_features,
+        file_names,
+        decoder_id,
+        root_path=None,
+    ):
+        if not root_path:
+            root_path = f"eval_output"
         base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}/decoder_{decoder_id}"
         pred_mask_path = f"{base_path}/pred_mask"
 
@@ -245,6 +256,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 real_id += 1
                 pred_class = pred_classes[instance_id]
                 score = scores[instance_id]
+                feature = pred_features[instance_id]
                 mask = pred_masks[:, instance_id].astype("uint8")
 
                 if score > self.config.general.export_threshold:
@@ -253,6 +265,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         f"{pred_mask_path}/{file_name}_{real_id}.txt",
                         mask,
                         fmt="%d",
+                    )
+                    np.save(
+                        f"{pred_mask_path}/{file_name}_{real_id}_{feature}.npy", feature
                     )
                     fout.write(
                         f"pred_mask/{file_name}_{real_id}.txt {pred_class} {score}\n"
@@ -552,6 +567,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             else None,
         )
 
+        self.log("val_epoch", self.trainer.current_epoch)
         if self.config.data.test_mode != "test":
             return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
         else:
@@ -576,7 +592,13 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
     # * nothing changed
     def get_mask_and_scores(
-        self, mask_cls, mask_pred, num_queries=100, num_classes=18, device=None
+        self,
+        mask_logits,
+        mask_pred,
+        mask_feats,
+        num_queries=100,
+        num_classes=18,
+        device=None,
     ):
         """
         for each mask: only pick the
@@ -596,15 +618,16 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         # label scores are softmax logits (p of instance being class c) over the top k classes
         if self.config.general.topk_per_image != -1:
-            scores_per_query, topk_indices = mask_cls.flatten(0, 1).topk(
+            scores_per_query, topk_indices = mask_logits.flatten(0, 1).topk(
                 self.config.general.topk_per_image, sorted=True
             )
         else:
-            scores_per_query, topk_indices = mask_cls.flatten(0, 1).topk(
+            scores_per_query, topk_indices = mask_logits.flatten(0, 1).topk(
                 num_queries, sorted=True
             )
 
         labels_per_query = labels[topk_indices]
+        features = mask_feats.flatten(0, 1)[topk_indices]
         topk_indices = topk_indices // num_classes
         mask_pred = mask_pred[:, topk_indices]
 
@@ -618,7 +641,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         score = scores_per_query * mask_scores_per_image
         classes = labels_per_query
 
-        return score, result_pred_mask, classes, heatmap
+        return score, result_pred_mask, classes, features, heatmap
 
     # * add pseudo logit computation
     # * get num classes from config instead of model
@@ -668,7 +691,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             torch.hstack(  # no class logit is last
                 [
                     cos_sims,
-                    torch.zeros((cos_sims.shape[0], 1), device=cos_sims.device),
+                    torch.full(
+                        size=(cos_sims.shape[0], 1),
+                        fill_value=-1.0,
+                        device=cos_sims.device,
+                    ),
                 ]
             )
         ).unsqueeze(0)
@@ -682,6 +709,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         all_pred_classes = list()
         all_pred_masks = list()
         all_pred_scores = list()
+        all_pred_features = list()
         all_heatmaps = list()
         all_query_pos = list()
 
@@ -709,6 +737,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     new_preds = {
                         "pred_masks": list(),
                         "pred_logits": list(),
+                        "pred_features": list(),
                     }
 
                     curr_coords_idx = masks.shape[0]
@@ -746,17 +775,38 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                                             bid, curr_query
                                         ]
                                     )
+                                    new_preds["pred_features"].append(
+                                        prediction[self.decoder_id]["pred_features"][
+                                            bid, curr_query
+                                        ]
+                                    )
 
-                    scores, masks, classes, heatmap = self.get_mask_and_scores(
+                    (
+                        scores,
+                        masks,
+                        classes,
+                        features,
+                        heatmap,
+                    ) = self.get_mask_and_scores(
                         torch.stack(new_preds["pred_logits"]).cpu(),
                         torch.stack(new_preds["pred_masks"]).T,
+                        torch.stack(new_preds["pred_features"]).cpu(),
                         len(new_preds["pred_logits"]),
                         self.config.data.num_labels,
                     )
                 else:
-                    scores, masks, classes, heatmap = self.get_mask_and_scores(
+                    (
+                        scores,
+                        masks,
+                        classes,
+                        features,
+                        heatmap,
+                    ) = self.get_mask_and_scores(
                         prediction[self.decoder_id]["pred_logits"][bid].detach().cpu(),
                         masks,
+                        prediction[self.decoder_id]["pred_features"][bid]
+                        .detach()
+                        .cpu(),
                         prediction[self.decoder_id]["pred_logits"][bid].shape[0],
                         self.config.data.num_labels,
                     )
@@ -806,6 +856,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             sort_scores_index = sort_scores.indices.cpu().numpy()
             sort_scores_values = sort_scores.values.cpu().numpy()
             sort_classes = classes[sort_scores_index]
+            sort_features = features[sort_scores_index]
 
             sorted_masks = masks[:, sort_scores_index]
             sorted_heatmap = heatmap[:, sort_scores_index]
@@ -843,11 +894,13 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 all_pred_classes.append(sort_classes[keep_instances])
                 all_pred_masks.append(sorted_masks[:, keep_instances])
                 all_pred_scores.append(sort_scores_values[keep_instances])
+                all_pred_features.append(sort_features[keep_instances])
                 all_heatmaps.append(sorted_heatmap[:, keep_instances])
             else:
                 all_pred_classes.append(sort_classes)
                 all_pred_masks.append(sorted_masks)
                 all_pred_scores.append(sort_scores_values)
+                all_pred_features.append(sort_features)
                 all_heatmaps.append(sorted_heatmap)
 
         if "scannet200" in self.validation_dataset.dataset_name:
@@ -928,6 +981,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     "pred_masks": all_pred_masks[bid],
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
+                    "pred_features": all_pred_features[bid],
                 }
             else:
                 # prev val_dataset
@@ -937,6 +991,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     ],
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
+                    "pred_features": all_pred_features[bid],
                 }
 
             # save visualizations if specifiec
@@ -1004,16 +1059,20 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         self.preds[file_names[bid]]["pred_masks"],
                         self.preds[file_names[bid]]["pred_scores"],
                         self.preds[file_names[bid]]["pred_classes"],
+                        self.preds[file_names[bid]]["pred_features"],
                         file_name,
                         self.decoder_id,
+                        root_path=self.config.general.export_root_path,
                     )
                 else:
                     self.export(
                         self.preds[file_names[bid]]["pred_masks"],
                         self.preds[file_names[bid]]["pred_scores"],
                         self.preds[file_names[bid]]["pred_classes"],
+                        self.preds[file_names[bid]]["pred_features"],
                         file_names[bid],
                         self.decoder_id,
+                        root_path=self.config.general.export_root_path,
                     )
 
     # * nothing changed

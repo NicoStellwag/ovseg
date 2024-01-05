@@ -590,7 +590,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         return mask
 
-    # * nothing changed
+    # * pass features vectors per query
     def get_mask_and_scores(
         self,
         mask_logits,
@@ -1286,9 +1286,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         self.bbox_gt = dict()
 
     # * just changed the loss logging name
+    # * exporting prevented running this for whatever reason
+    # * (which meant monitoring for checkpointing does not work)
     def test_epoch_end(self, outputs):
-        if self.config.general.export:
-            return
+        # if self.config.general.export:
+        #     return
 
         self.eval_instance_epoch_end()
 

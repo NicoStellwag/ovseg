@@ -9,10 +9,10 @@ general:
   train_on_segments: true
   eval_on_segments: true
   filter_out_instances: false
-  save_visualizations: true
+  save_visualizations: false
   visualization_point_size: 20
   decoder_id: -1
-  export: true
+  export: false
   export_root_path: /mnt/hdd/eval_output
   use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100

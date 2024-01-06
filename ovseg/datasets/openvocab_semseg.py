@@ -444,7 +444,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 k = choice(list(colmap.keys()))
                 output_colors.append(colmap.pop(k))
             else:
-                output_colors.append(self.color_map[l])
+                output_colors.append((0.0, 0.0, 0.0) if l == 201 else self.color_map[l])
 
         return torch.tensor(output_colors)
 

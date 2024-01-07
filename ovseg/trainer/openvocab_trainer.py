@@ -597,7 +597,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         mask_pred,
         mask_feats,
         num_queries=100,
-        num_classes=18,
         device=None,
     ):
         """
@@ -609,6 +608,8 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         """
         if device is None:
             device = self.device
+
+        num_classes = mask_logits.shape[-1]
         labels = (
             torch.arange(num_classes, device=device)
             .unsqueeze(0)
@@ -805,7 +806,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         torch.stack(new_preds["pred_masks"]).T,
                         torch.stack(new_preds["pred_features"]).cpu(),
                         len(new_preds["pred_logits"]),
-                        self.config.data.num_labels,
                     )
                 else:
                     (
@@ -821,7 +821,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         .detach()
                         .cpu(),
                         prediction[self.decoder_id]["pred_logits"][bid].shape[0],
-                        self.config.data.num_labels,
                     )
 
                 masks = self.get_full_res_mask(
@@ -858,7 +857,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     prediction[self.decoder_id]["pred_logits"][bid].cpu(),
                     masks,
                     prediction[self.decoder_id]["pred_logits"][bid].shape[0],
-                    self.model.num_classes - 1,
                     device="cpu",
                 )
 

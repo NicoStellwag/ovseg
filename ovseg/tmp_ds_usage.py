@@ -48,6 +48,18 @@ def main(cfg: DictConfig):
     #     idx,
     # ) = ds[0]
 
+    # # make sense of label remapping process
+    # labels = np.arange(198) # num classes - label_offset (ignore floor, wall)
+    # labels[0] = -1  # remap first logit to chair instead of floor
+    # ids = ds._remap_model_output(labels + 2)
+    # print("labels")
+    # print(labels)
+    # print("ids")
+    # print(ids)
+    # print("label info keys")
+    # print(list(ds.label_info.keys()))
+    # print(len(labels), len(list(ds.label_info.keys())))
+
     # viz augmented scene
     aug_colors = feats[:, :3]
     visualize_3d_feats(

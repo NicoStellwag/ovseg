@@ -674,8 +674,20 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         # compute pseudo class logits as cosine similarities
         # ===============
         # label feats
-        all_labels = np.arange(self.config.data.num_labels)
-        all_label_ids = self.validation_dataset._remap_model_output(all_labels)
+
+        # in the mask3d impl. the model is set to 201 output dims for sn200 (it includes floor and wall)
+        # this is very likely a bug:
+        # the last logit maps to class 199, plus offset 2 = 201 => key error in the ds class
+        # so we only want 198 classes + no class = 199 logits total
+        all_labels = np.arange(self.config.data.num_labels - label_offset)
+        # we want chair instead of floor to be included
+        # (they apply the same hack in other parts of the trainer so fixing
+        # it in the dataset class would include bugs in the validation)
+        all_labels[0] = -1
+
+        all_label_ids = self.validation_dataset._remap_model_output(
+            all_labels + label_offset
+        )
         all_label_feats = self.validation_dataset.map2features(
             labels=all_label_ids,
             device=prediction[self.decoder_id]["pred_features"].device,
@@ -690,12 +702,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         # logits become cos sims
         cos_sims = pred_feats @ all_label_feats.T  # tens(n_queries, n_labels)
         prediction[self.decoder_id]["pred_logits"] = (
-            torch.hstack(  # no class logit is last
+            torch.hstack(  # append logits for no class that get thrown away below
                 [
                     cos_sims,
-                    torch.full(
+                    torch.empty(
                         size=(cos_sims.shape[0], 1),
-                        fill_value=-1.0,
                         device=cos_sims.device,
                     ),
                 ]
@@ -905,6 +916,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 all_pred_features.append(sort_features)
                 all_heatmaps.append(sorted_heatmap)
 
+        # for scannet 200 make consecutive class 0 correspond to chair instead of floor
         if "scannet200" in self.validation_dataset.dataset_name:
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
             if self.config.data.test_mode != "test":
@@ -941,7 +953,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
                         bbox_data.append(
                             (
-                                all_pred_classes[bid][query_id].item(),
+                                all_pred_classes[bid][
+                                    query_id
+                                ].item(),  # original semantic id
                                 bbox,
                                 all_pred_scores[bid][query_id],
                             )

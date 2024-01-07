@@ -235,8 +235,9 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
         # fix: label map has a bug:
         #      "floor" and "chair" text labels are swapped
+        # update: its "fixed" in the trainer eval_instance_step, so don't change it here
         # ===========================
-        labels[2]["name"], labels[3]["name"] = labels[3]["name"], labels[2]["name"]
+        # labels[2]["name"], labels[3]["name"] = labels[3]["name"], labels[2]["name"]
         # ===========================
 
         # if working only on classes for validation - discard other labels
@@ -444,7 +445,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 k = choice(list(colmap.keys()))
                 output_colors.append(colmap.pop(k))
             else:
-                output_colors.append((0.0, 0.0, 0.0) if l == 201 else self.color_map[l])
+                output_colors.append(self.color_map[l])
 
         return torch.tensor(output_colors)
 

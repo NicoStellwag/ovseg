@@ -2,7 +2,7 @@
 _target_: models.Mask3D
 
 # transformer parameters
-hidden_dim: 128
+hidden_dim: 512
 dim_feedforward: 1024
 num_queries: 100
 num_heads: 8
@@ -27,7 +27,7 @@ sample_sizes: [200, 800, 3200, 12800, 51200]
 max_sample_size: false # change false means sampling activated
 
 shared_decoder: true
-num_classes: 128 # hard code this here, we want the general one to still be 200
+num_classes: 512 # hard code this here, we want the general one to still be 200
 train_on_segments: ${general.train_on_segments}
 scatter_type: "mean"
 

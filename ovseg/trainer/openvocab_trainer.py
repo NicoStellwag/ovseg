@@ -148,9 +148,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         """
         apply dimensionality reduction to a dataset target
         """
-        for i in range(len(target)):
-            feats = target[i]["instance_feats"]  # tens(n_inst_gt, dim_feat_full)
-            target[i]["instance_feats"] = self.dim_reduce(feats)
+        if self.config.data.dim_reduce:
+            for i in range(len(target)):
+                feats = target[i]["instance_feats"]  # tens(n_inst_gt, dim_feat_full)
+                target[i]["instance_feats"] = self.dim_reduce(feats)
         return target
 
     # * only log name of loss changed
@@ -224,14 +225,14 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         self.log_dict(logs)
-        self.log("train_epoch", self.trainer.current_epoch)
+        self.log("train_epoch", float(self.trainer.current_epoch), batch_size=1)
         return sum(losses.values())
 
     # * nothing changed
     def validation_step(self, batch, batch_idx):
         return self.eval_step(batch, batch_idx)
 
-    # todo change this to export clip vecs
+    # * exports clip vecs
     def export(
         self,
         pred_masks,
@@ -567,7 +568,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             else None,
         )
 
-        self.log("val_epoch", self.trainer.current_epoch)
+        self.log("val_epoch", float(self.trainer.current_epoch), batch_size=1)
         if self.config.data.test_mode != "test":
             return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
         else:

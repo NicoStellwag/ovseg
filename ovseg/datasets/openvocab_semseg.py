@@ -50,6 +50,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         ground_truth_dir: str = "/mnt/hdd/self_training_initial",
         point_instances_file: str = "pointwise_instances.npy",
         instance_labels_file: str = "instance_labels.npy",
+        dim_reduce: bool = False,
         feature_dim_reduction_path: str = "/mnt/hdd/self_training_initial/pca.pkl",
         label_db_filepath: Optional[
             str
@@ -253,7 +254,6 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         # load clip model and dimensionality reduction
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         clip_model, _ = clip.load("ViT-B/32", device=device)
-        dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
 
         # get clip embeddings from label text
         text_labels = [i["name"] for i in self._labels.values()]
@@ -266,8 +266,12 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             label_feats = label_feats.cpu().numpy()
 
         # apply dimensionality reduction
-        label_feats = dim_reduction.transform(label_feats)
-        label_feats = F.normalize(torch.from_numpy(label_feats), p=2, dim=-1).numpy()
+        if dim_reduce:
+            dim_reduction = SavablePCA.from_file(feature_dim_reduction_path)
+            label_feats = dim_reduction.transform(label_feats)
+            label_feats = F.normalize(
+                torch.from_numpy(label_feats), p=2, dim=-1
+            ).numpy()
 
         # make them indexable by label ids
         self.label_feature_map = {

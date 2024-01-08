@@ -20,6 +20,7 @@ in_channels: 3 # in_channels = 3 * (add_normals + add_colors + add_raw_coordinat
 num_labels: 200
 add_instance: ${general.add_instance}
 task: ${general.task}
+dim_reduce: false
 
 # data loader
 pin_memory: false

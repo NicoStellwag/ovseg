@@ -225,7 +225,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         self.log_dict(logs)
-        self.log("train_epoch", float(self.trainer.current_epoch), batch_size=1)
         return sum(losses.values())
 
     # * nothing changed
@@ -568,7 +567,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             else None,
         )
 
-        self.log("val_epoch", float(self.trainer.current_epoch), batch_size=1)
         if self.config.data.test_mode != "test":
             return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
         else:

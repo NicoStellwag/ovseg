@@ -1,0 +1,24 @@
+# ninja log v5
+1	6586	1699649529871994179	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/group_points_gpu.o	369b7817f7692fe0
+0	7089	1699649530379987021	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/ball_query_gpu.o	15e7798df85882dd
+1	7115	1699649530403986683	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/sampling_gpu.o	786b5cefb601b32c
+0	7170	1699649530455985951	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/bindings.o	423247521d1c12db
+0	7511	1699649530799981103	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/ball_query.o	c5090654f6a11156
+1	7584	1699649530871980089	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/sampling.o	39eb241851e6e9d6
+1	7652	1699649530939979131	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/interpolate_gpu.o	744de4bef354c0be
+1	7751	1699649531035977779	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/interpolate.o	6c470128ed09808b
+1	7994	1699649531283974284	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/group_points.o	1a07c0e8ee4018eb
+6	6813	1699814289464136752	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/bindings.o	423247521d1c12db
+5	7162	1699814289812131864	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/ball_query.o	c5090654f6a11156
+6	7200	1699814289852131302	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/interpolate.o	6c470128ed09808b
+6	7206	1699814289856131246	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/group_points.o	1a07c0e8ee4018eb
+6	7236	1699814289884130852	/home/stellwag/dev/ovseg/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/sampling.o	39eb241851e6e9d6
+1	6893	1701032783847608246	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/interpolate_gpu.o	9fc08f7333d017b4
+0	7133	1701032784087605443	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/group_points_gpu.o	458364e66157a44d
+1	7476	1701032784431601427	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/sampling_gpu.o	e2a65e5d6235338b
+0	7672	1701032784619599233	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/bindings.o	7367acd4370bdc15
+0	7889	1701032784843596618	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/ball_query_gpu.o	803bb29b64b857f6
+1	8027	1701032784979595030	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/sampling.o	f2dfacc3c126b6e2
+0	8262	1701032785215592276	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/ball_query.o	e8686c5cc60658a5
+0	8395	1701032785347590735	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/group_points.o	f8a9c70b8c7bf3c1
+1	8442	1701032785391590221	/home/luebberstedt/third_party/pointnet2/build/temp.linux-x86_64-cpython-310/_ext_src/src/interpolate.o	41e6374113384d92

@@ -1,0 +1,9 @@
+# @package _group_
+save_dir: /mnt/hdd/ncut_features/2d/dinov2
+model: # https://huggingface.co/docs/transformers/main/model_doc/dinov2
+  type: huggingface_transformers
+  processor_name: facebook/dinov2-base
+  model_name: facebook/dinov2-base
+data:
+  dataset_dir: /mnt/hdd/scannet
+  sensordata_filename_pattern: "*.sens"

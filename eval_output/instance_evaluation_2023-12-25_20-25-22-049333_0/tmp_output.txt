@@ -1,0 +1,19 @@
+class,class id,ap,ap50,ap25
+cabinet,3,0.0,0.0,0.0
+bed,4,0.0,0.0,0.0
+chair,5,0.0,0.0,0.0
+sofa,6,nan,nan,nan
+table,7,0.0,0.0,0.0
+door,8,nan,nan,nan
+window,9,nan,nan,nan
+bookshelf,10,nan,nan,nan
+picture,11,nan,nan,nan
+counter,12,nan,nan,nan
+desk,14,0.0,0.0,0.0
+curtain,16,0.0,0.0,0.0
+refrigerator,24,nan,nan,nan
+shower curtain,28,nan,nan,nan
+toilet,33,0.0,0.0,0.0
+sink,34,nan,nan,nan
+bathtub,36,nan,nan,nan
+otherfurniture,39,nan,nan,nan

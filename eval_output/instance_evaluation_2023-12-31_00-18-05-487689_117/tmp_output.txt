@@ -1,0 +1,199 @@
+class,class id,ap,ap50,ap25
+chair,2,0.0,0.0,0.0
+table,4,0.0,0.0,0.03571428571428571
+door,5,0.0,0.0,0.0
+couch,6,nan,nan,nan
+cabinet,7,0.0,0.0,0.0
+shelf,8,nan,nan,nan
+desk,9,nan,nan,nan
+office chair,10,nan,nan,nan
+bed,11,nan,nan,nan
+pillow,13,nan,nan,nan
+sink,14,0.0,0.0,0.0
+picture,15,nan,nan,nan
+window,16,0.0,0.0,0.0
+toilet,17,nan,nan,nan
+bookshelf,18,nan,nan,nan
+monitor,19,nan,nan,nan
+curtain,21,nan,nan,nan
+book,22,nan,nan,nan
+armchair,23,0.0,0.0,0.0
+coffee table,24,nan,nan,nan
+box,26,nan,nan,nan
+refrigerator,27,0.0,0.0,0.0
+lamp,28,nan,nan,nan
+kitchen cabinet,29,0.0,0.0,0.0
+towel,31,nan,nan,nan
+clothes,32,nan,nan,nan
+tv,33,0.0,0.0,0.0
+nightstand,34,nan,nan,nan
+counter,35,nan,nan,nan
+dresser,36,nan,nan,nan
+stool,38,nan,nan,nan
+cushion,39,nan,nan,nan
+plant,40,nan,nan,nan
+ceiling,41,0.0,0.0,0.0
+bathtub,42,nan,nan,nan
+end table,44,nan,nan,nan
+dining table,45,0.0,0.0,0.0
+keyboard,46,nan,nan,nan
+bag,47,nan,nan,nan
+backpack,48,nan,nan,nan
+toilet paper,49,nan,nan,nan
+printer,50,nan,nan,nan
+tv stand,51,nan,nan,nan
+whiteboard,52,nan,nan,nan
+blanket,54,nan,nan,nan
+shower curtain,55,nan,nan,nan
+trash can,56,0.0,0.0,0.0
+closet,57,nan,nan,nan
+stairs,58,nan,nan,nan
+microwave,59,nan,nan,nan
+stove,62,nan,nan,nan
+shoe,63,nan,nan,nan
+computer tower,64,nan,nan,nan
+bottle,65,nan,nan,nan
+bin,66,nan,nan,nan
+ottoman,67,nan,nan,nan
+bench,68,nan,nan,nan
+board,69,nan,nan,nan
+washing machine,70,nan,nan,nan
+mirror,71,nan,nan,nan
+copier,72,nan,nan,nan
+basket,73,nan,nan,nan
+sofa chair,74,nan,nan,nan
+file cabinet,75,nan,nan,nan
+fan,76,nan,nan,nan
+laptop,77,nan,nan,nan
+shower,78,nan,nan,nan
+paper,79,nan,nan,nan
+person,80,nan,nan,nan
+paper towel dispenser,82,nan,nan,nan
+oven,84,0.0,0.0,0.0
+blinds,86,nan,nan,nan
+rack,87,nan,nan,nan
+plate,88,nan,nan,nan
+blackboard,89,nan,nan,nan
+piano,90,nan,nan,nan
+suitcase,93,nan,nan,nan
+rail,95,nan,nan,nan
+radiator,96,nan,nan,nan
+recycling bin,97,nan,nan,nan
+container,98,nan,nan,nan
+wardrobe,99,nan,nan,nan
+soap dispenser,100,nan,nan,nan
+telephone,101,nan,nan,nan
+bucket,102,nan,nan,nan
+clock,103,nan,nan,nan
+stand,104,nan,nan,nan
+light,105,nan,nan,nan
+laundry basket,106,nan,nan,nan
+pipe,107,nan,nan,nan
+clothes dryer,110,nan,nan,nan
+guitar,112,nan,nan,nan
+toilet paper holder,115,nan,nan,nan
+seat,116,nan,nan,nan
+speaker,118,nan,nan,nan
+column,120,nan,nan,nan
+bicycle,121,nan,nan,nan
+ladder,122,nan,nan,nan
+bathroom stall,125,nan,nan,nan
+shower wall,128,nan,nan,nan
+cup,130,nan,nan,nan
+jacket,131,nan,nan,nan
+storage bin,132,nan,nan,nan
+coffee maker,134,nan,nan,nan
+dishwasher,136,nan,nan,nan
+paper towel roll,138,nan,nan,nan
+machine,139,nan,nan,nan
+mat,140,nan,nan,nan
+windowsill,141,nan,nan,nan
+bar,145,nan,nan,nan
+toaster,148,nan,nan,nan
+bulletin board,154,nan,nan,nan
+ironing board,155,nan,nan,nan
+fireplace,156,nan,nan,nan
+soap dish,157,nan,nan,nan
+kitchen counter,159,0.0,0.0,0.0
+doorframe,161,0.0,0.0,0.0
+toilet paper dispenser,163,nan,nan,nan
+mini fridge,165,nan,nan,nan
+fire extinguisher,166,nan,nan,nan
+ball,168,nan,nan,nan
+hat,169,nan,nan,nan
+shower curtain rod,170,nan,nan,nan
+water cooler,177,nan,nan,nan
+paper cutter,180,nan,nan,nan
+tray,185,nan,nan,nan
+shower door,188,nan,nan,nan
+pillar,191,nan,nan,nan
+ledge,193,nan,nan,nan
+toaster oven,195,nan,nan,nan
+mouse,202,nan,nan,nan
+toilet seat cover dispenser,208,nan,nan,nan
+furniture,213,0.0,0.0,0.0
+cart,214,nan,nan,nan
+storage container,221,nan,nan,nan
+scale,229,nan,nan,nan
+tissue box,230,nan,nan,nan
+light switch,232,nan,nan,nan
+crate,233,nan,nan,nan
+power outlet,242,nan,nan,nan
+decoration,250,nan,nan,nan
+sign,261,nan,nan,nan
+projector,264,nan,nan,nan
+closet door,276,nan,nan,nan
+vacuum cleaner,283,nan,nan,nan
+candle,286,nan,nan,nan
+plunger,300,nan,nan,nan
+stuffed animal,304,nan,nan,nan
+headphones,312,nan,nan,nan
+dish rack,323,nan,nan,nan
+broom,325,nan,nan,nan
+guitar case,331,nan,nan,nan
+range hood,342,nan,nan,nan
+dustpan,356,nan,nan,nan
+hair dryer,370,nan,nan,nan
+water bottle,392,nan,nan,nan
+handicap bar,395,nan,nan,nan
+purse,399,nan,nan,nan
+vent,408,nan,nan,nan
+shower floor,417,nan,nan,nan
+water pitcher,488,nan,nan,nan
+mailbox,540,nan,nan,nan
+bowl,562,nan,nan,nan
+paper bag,570,nan,nan,nan
+alarm clock,572,nan,nan,nan
+music stand,581,nan,nan,nan
+projector screen,609,nan,nan,nan
+divider,748,nan,nan,nan
+laundry detergent,776,nan,nan,nan
+bathroom counter,1156,nan,nan,nan
+object,1163,nan,nan,nan
+bathroom vanity,1164,nan,nan,nan
+closet wall,1165,nan,nan,nan
+laundry hamper,1166,nan,nan,nan
+bathroom stall door,1167,nan,nan,nan
+ceiling light,1168,nan,nan,nan
+trash bin,1169,nan,nan,nan
+dumbbell,1170,nan,nan,nan
+stair rail,1171,nan,nan,nan
+tube,1172,nan,nan,nan
+bathroom cabinet,1173,nan,nan,nan
+cd case,1174,nan,nan,nan
+closet rod,1175,nan,nan,nan
+coffee kettle,1176,nan,nan,nan
+structure,1178,nan,nan,nan
+shower head,1179,nan,nan,nan
+keyboard piano,1180,nan,nan,nan
+case of water bottles,1181,nan,nan,nan
+coat rack,1182,nan,nan,nan
+storage organizer,1183,nan,nan,nan
+folded chair,1184,nan,nan,nan
+fire alarm,1185,nan,nan,nan
+power strip,1186,nan,nan,nan
+calendar,1187,nan,nan,nan
+poster,1188,nan,nan,nan
+potted plant,1189,nan,nan,nan
+luggage,1190,nan,nan,nan
+mattress,1191,nan,nan,nan

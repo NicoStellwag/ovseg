@@ -19,8 +19,4 @@ conda env update -f environment.yml
 ## Converting Mask3D labels to CLIP vectors
 
 Todos:
-- Modify semseg dataset to load clip vecs as labels
-- Modify models.criterion.SetCriterion.loss_labels to do mean cos dist or something
-- We probably want parametric instance queries with dim(query) > dim(clip)
-- Think about query initialization
-- Modify mask module to return clip vecs instead of class probabilities (if it returs logits we might get away with modifying the # of classes accordingly (probably dim(clip) + 1 for the unassigned class))
+- collate fn should filter out instances for which the aggregated feature vec is 0

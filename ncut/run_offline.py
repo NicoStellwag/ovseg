@@ -5,6 +5,12 @@ import numpy as np
 import torch.nn.functional as F
 import os
 from scipy.linalg import eigh
+from sklearn.manifold import spectral_embedding
+from pyclustering.cluster.gmeans import gmeans
+from pyclustering.cluster.xmeans import xmeans, splitting_type
+from pyclustering.cluster.elbow import elbow
+from sklearn.cluster import k_means
+
 import logging
 
 
@@ -397,6 +403,152 @@ def maskcut3d(
     return bipartitions
 
 
+# spectral clustering implementation
+# =================
+
+
+def feature_spectral_embeddings(feats, unique_segments, seg_connectivity):
+    """
+    arguments:
+    feats: tens(n_segs, feature_dim) or tuple(tens(n_segs, feat_dim1), tens(n_segs, feat_dim2))
+    unique_segments: np(n_segs,): unique segment ids in the same order of features
+    seg_connectivity: neighborhood graph of segments tens(n_edges, 2)
+
+    returns: tuple(U, A)
+    U: row-wise spectral embeddings np(n_seg, n_seg)
+    A: affinity matrix np(n_seg, n_seg)
+
+    (if feats is tuple the affinity is mean of both affinity matrices)
+    """
+    # adjacency/affinity matrix
+    if not isinstance(feats, tuple):  # single modality feature
+        feats_a = F.normalize(feats, p=2, dim=-1)
+        A = feats_a @ feats_a.T
+    else:  # multi-modality feature, average the attention scores from both modalities
+        # Calculate both attentions
+        feats_a, feats_b = feats
+        feats_a = F.normalize(feats_a, p=2, dim=-1)
+        feats_b = F.normalize(feats_b, p=2, dim=-1)
+        A_a, A_b = feats_a @ feats_a.T, feats_b @ feats_b.T
+        A = (A_a + A_b) / 2
+
+    # only neighboring segments are connected
+    segment_id_to_index = {}
+    for s_index, s_id in enumerate(unique_segments):
+        segment_id_to_index[s_id.item()] = s_index
+    mask = torch.zeros_like(A)
+    for edge in seg_connectivity:
+        u, v = edge[0].item(), edge[1].item()
+        i_u, i_v = segment_id_to_index[u], segment_id_to_index[v]
+        mask[i_u, i_v] = 1.0
+        mask[i_v, i_u] = 1.0
+    A = A * mask
+
+    # spectral embeddings (eigenvectors of laplacian)
+    U = spectral_embedding(
+        A.cpu().numpy(),
+        norm_laplacian=True,  # (normed L: normalized cut, unnormed L: ratio cut)
+        drop_first=False,  # first eigenvec is const for fully connected graph, we have missing edges though
+    )
+
+    return U, A.cpu().numpy()
+
+
+def spectral_cluster_3d(
+    cluster_method,
+    feats,
+    unique_segments,
+    seg_connectivity,
+    max_instances,
+    gmeans_tolerance=None,
+    xmeans_tolerance=None,
+    kmeans_k=None,
+):
+    """
+    arguments:
+    feats: tens(n_segs, feature_dim) or tuple(tens(n_segs, feat_dim1), tens(n_segs, feat_dim2))
+    unique_segments: np(n_segs,): unique segment ids in the same order of features
+    seg_connectivity: neighborhood graph of segments tens(n_edges, 2)
+    max_instances: maximum number of instances
+    cluster_tolerance: max value of change of center after which clustering stops
+
+    returns:
+    instances np(n_instances, n_segments) col-wise one hot representation of instance
+    """
+    assert cluster_method in ["kmeans", "gmeans", "xmeans", "elbow"]
+
+    U, A = feature_spectral_embeddings(feats, unique_segments, seg_connectivity)
+
+    # k-means
+    if cluster_method == "kmeans":
+        assert kmeans_k, "if cluster method is kmeans, set kmeans_k"
+        _, clusters, _ = k_means(X=U, n_clusters=kmeans_k)
+        n_segments = A.shape[0]
+        n_instances = np.unique(clusters).shape[0]
+        bipartitions = np.zeros(shape=(n_instances, n_segments))
+        for seg_idx, instance in enumerate(clusters):
+            bipartitions[instance, seg_idx] = 1.0
+
+    # g-means
+    if cluster_method == "gmeans":
+        gmargs = {}
+        if gmeans_tolerance:
+            gmargs["tolerance"] = gmeans_tolerance
+        gm = gmeans(
+            U, repeat=10, k_max=max_instances, **gmargs
+        )  # a clustering algorithm that does not need fixed k
+        clusters = (
+            gm.process().get_clusters()
+        )  # list (len=n_clusters) of lists (len=n_segs_cluster)
+        n_segments = A.shape[0]
+        n_instances = len(clusters)
+        bipartitions = np.zeros(shape=(n_instances, n_segments))
+        for i_cluster, cluster in enumerate(clusters):
+            for seg in cluster:
+                bipartitions[i_cluster, seg] = 1.0
+
+    # x-means
+    if cluster_method == "xmeans":
+        xmargs = {}
+        if xmeans_tolerance:
+            xmargs["tolerance"] = xmeans_tolerance
+        xm = xmeans(
+            U,
+            k_max=max_instances,
+            criterion=splitting_type.BAYESIAN_INFORMATION_CRITERION,
+            **xmargs,
+        )  # a clustering algorithm that does not need fixed k
+        clusters = (
+            xm.process().get_clusters()
+        )  # list (len=n_clusters) of lists (len=n_segs_cluster)
+        n_segments = A.shape[0]
+        n_instances = len(clusters)
+        bipartitions = np.zeros(shape=(n_instances, n_segments))
+        for i_cluster, cluster in enumerate(clusters):
+            for seg in cluster:
+                bipartitions[i_cluster, seg] = 1.0
+
+    # elbow
+    if cluster_method == "elbow":
+        el = elbow(
+            U,
+            kmin=1,
+            kmax=max_instances,
+        )  # heuristic for optimal k
+        k = el.process().get_amount()
+        _, clusters, _ = k_means(X=U, n_clusters=k)
+        n_segments = A.shape[0]
+        n_instances = np.unique(clusters).shape[0]
+        bipartitions = np.zeros(shape=(n_instances, n_segments))
+        for seg_idx, instance in enumerate(clusters):
+            bipartitions[instance, seg_idx] = 1.0
+
+    return bipartitions
+
+
+# =================
+
+
 def segment_scene(
     coords,
     feats_3d,
@@ -418,19 +570,43 @@ def segment_scene(
     aggregated_features = (aggregated_3d_features, aggregated_2d_features)
 
     # Start the iterative NCut algorithm
-    bipartitions = maskcut3d(
-        aggregated_features,
-        unique_segments,
-        seg_connectivity,
-        segment_ids,
-        coords,
-        # feats,
-        affinity_tau=config.ncut.affinity_tau,
-        max_number_of_instances=config.ncut.max_number_of_instances,
-        min_segment_size=config.ncut.min_segment_size,
-        separation_mode=config.ncut.separation_mode,
-        max_extent_ratio=config.ncut.max_extent_ratio,
-    )
+    if config.ncut.method == "iterative":
+        bipartitions = maskcut3d(
+            aggregated_features,
+            unique_segments,
+            seg_connectivity,
+            segment_ids,
+            coords,
+            # feats,
+            affinity_tau=config.ncut.affinity_tau,
+            max_number_of_instances=config.ncut.max_number_of_instances,
+            min_segment_size=config.ncut.min_segment_size,
+            separation_mode=config.ncut.separation_mode,
+            max_extent_ratio=config.ncut.max_extent_ratio,
+        )
+    elif config.ncut.method == "spectral_clustering":
+        gmeans_tolerance = (
+            None
+            if config.ncut.spectral_gmeans_tolerance == -1
+            else config.ncut.spectral_gmeans_tolerance
+        )
+        xmeans_tolerance = (
+            None
+            if config.ncut.spectral_xmeans_tolerance == -1
+            else config.ncut.spectral_xmeans_tolerance
+        )
+        bipartitions = spectral_cluster_3d(
+            cluster_method=config.ncut.spectral_cluster_method,
+            feats=aggregated_features,
+            unique_segments=unique_segments,
+            seg_connectivity=seg_connectivity,
+            max_instances=config.ncut.max_number_of_instances,
+            gmeans_tolerance=gmeans_tolerance,
+            xmeans_tolerance=xmeans_tolerance,
+            kmeans_k=config.ncut.spectral_kmeans_k,
+        )
+    else:
+        raise ValueError("ncut.method must be 'iterative' or 'spectral_clustering'")
 
     return bipartitions, aggregated_features
 
@@ -490,7 +666,7 @@ def main(cfg):
         if cfg.ncut.data.dataset.mode == "train":  # for train mode use ncut masks
             # segment scene using normalized cut
             (
-                bipartitions,  # np(n_segments, n_instances) col-wise one hot representation of instance
+                bipartitions,  # np(n_instances, n_segments) col-wise one hot representation of instance
                 (
                     segment_feats_3d,  # tens(n_segments, dim_feat_3d)
                     segment_feats_2d,  # tens(n_segments, dim_feat_2d)
@@ -504,7 +680,7 @@ def main(cfg):
                 segment_connectivity,
             )
 
-            # Calculate inverse segment mapping
+            # Calculate segmentwise to pointwise mapping
             unique_segments = segment_ids.unique()
             segment_indices = torch.zeros_like(segment_ids)
             for i, segment_id in enumerate(unique_segments):
@@ -578,6 +754,7 @@ def main(cfg):
         coords_file = os.path.join(scan_dir, cfg.ncut.coords_filename)
         instances_file = os.path.join(scan_dir, cfg.ncut.instances_filename)
         labels_file = os.path.join(scan_dir, cfg.ncut.labels_filename)
+        log.info(f"Number of instances: {labels.shape[0]}")
         np.save(coords_file, coords.cpu().numpy())  # (n_points, 3)
         log.info(f"Saved: {coords_file}")
         np.save(instances_file, pointwise_instances)  # (n_points, n_instances) (onehot)
@@ -596,7 +773,8 @@ def main(cfg):
             visualize_segments(
                 coords.cpu().numpy(),
                 unique_segments.cpu().numpy(),
-                segment_ids,
+                segment_connectivity.cpu().numpy(),
+                segment_ids.cpu().numpy(),
                 segment_visualization_file,
             )
             log.info(f"Saved: {segment_visualization_file}")

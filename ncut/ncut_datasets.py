@@ -239,6 +239,7 @@ class NormalizedCutDataset(Dataset):
         base_dir_2d,
         coords_filename_2d,
         features_filename_2d,
+        skip=1,
     ):
         self.scannet_base_dir = scannet_base_dir
         self.scannet_preprocessed_base_dir = scannet_preprocessed_base_dir
@@ -255,7 +256,7 @@ class NormalizedCutDataset(Dataset):
         assert mode in ["train", "val", "test"], "mode must be train, val, or test"
         split_file = os.path.join(scannet_base_dir, "splits", f"scannetv2_{mode}.txt")
         with open(split_file, "r") as sf:
-            self.scenes = [i.strip() for i in sf.readlines()]
+            self.scenes = [i.strip() for i in sf.readlines()][::skip]
 
     def __len__(self):
         return len(self.scenes)

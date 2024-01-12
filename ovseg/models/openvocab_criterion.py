@@ -26,6 +26,7 @@ def dice_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
     num_masks: float,
+    weights: torch.Tensor,
 ):
     """
     Compute the DICE loss, similar to generalized IOU for masks
@@ -40,8 +41,8 @@ def dice_loss(
     inputs = inputs.flatten(1)
     numerator = 2 * (inputs * targets).sum(-1)
     denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss.sum() / num_masks
+    loss = weights * (1 - (numerator + 1) / (denominator + 1))
+    return loss.sum() / num_masks # todo maybe take mean only over non masked samples
 
 
 dice_loss_jit = torch.jit.script(dice_loss)  # type: torch.jit.ScriptModule
@@ -51,6 +52,7 @@ def sigmoid_ce_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
     num_masks: float,
+    weights: torch.Tensor,
 ):
     """
     Args:
@@ -62,9 +64,9 @@ def sigmoid_ce_loss(
     Returns:
         Loss tensor
     """
-    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    loss = weights.view(-1, 1) * F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
 
-    return loss.mean(1).sum() / num_masks
+    return loss.mean(1).sum() / num_masks # todo maybe take mean only over non masked samples
 
 
 sigmoid_ce_loss_jit = torch.jit.script(sigmoid_ce_loss)  # type: torch.jit.ScriptModule
@@ -105,6 +107,7 @@ class OpenVocabSetCriterion(nn.Module):
         oversample_ratio,
         importance_sample_ratio,
         class_weights,
+        droploss_iou_thresh,
     ):
         """Create the criterion.
         Parameters:
@@ -136,6 +139,8 @@ class OpenVocabSetCriterion(nn.Module):
         self.num_points = num_points
         self.oversample_ratio = oversample_ratio
         self.importance_sample_ratio = importance_sample_ratio
+
+        self.droploss_iou_thresh = droploss_iou_thresh
 
     def loss_labels(self, outputs, targets, indices, num_masks, mask_type):
         """Classification loss (NLL)
@@ -223,12 +228,18 @@ class OpenVocabSetCriterion(nn.Module):
             map = map[:, point_idx]
             target_mask = target_mask[:, point_idx].float()
 
-            loss_masks.append(sigmoid_ce_loss_jit(map, target_mask, num_masks))
-            loss_dices.append(dice_loss_jit(map, target_mask, num_masks))
+            pred_foreground = map > 0.
+            iou_scores = (pred_foreground * target_mask).sum(dim=1) / (pred_foreground + target_mask).sum(dim=1)
+            weights = (iou_scores >= self.droploss_iou_thresh).float()
+            target_mask = target_mask.float()
+
+            loss_masks.append(sigmoid_ce_loss_jit(map, target_mask, num_masks, weights))
+            loss_dices.append(dice_loss_jit(map, target_mask, num_masks, weights))
+
         # del target_mask
         return {
-            "loss_mask": torch.sum(torch.stack(loss_masks)),
-            "loss_dice": torch.sum(torch.stack(loss_dices)),
+            "loss_mask": torch.mean(torch.stack(loss_masks)),
+            "loss_dice": torch.mean(torch.stack(loss_dices)),
         }
 
         src_idx = self._get_src_permutation_idx(indices)

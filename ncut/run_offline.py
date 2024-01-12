@@ -663,7 +663,7 @@ def main(cfg):
         )  # tens(-1, 2)
         scene_name = sample["scene_name"][0]
 
-        if cfg.ncut.data.dataset.mode == "train":  # for train mode use ncut masks
+        if cfg.ncut.use_ds_gt_segmentation:
             # segment scene using normalized cut
             (
                 bipartitions,  # np(n_instances, n_segments) col-wise one hot representation of instance

@@ -7,6 +7,7 @@ segment_visualization_filename: segments.html
 instance_visualization_filename: instances.html
 feature_extraction_2d: ???
 feature_extraction_3d: ???
+use_ds_gt_segmentation: false # if true, aggregate features over ds ground truth instances
 method: iterative # iterative / spectral_clustering
 
 # spectral clustering
@@ -18,7 +19,7 @@ spectral_xmeans_tolerance: -1 # , -1 takes default, we likely want higher
 # iterative
 affinity_tau: 0.73
 
-max_number_of_instances: 30
+max_number_of_instances: 25
 min_segment_size: 4
 separation_mode: max
 max_extent_ratio: 0.8
@@ -35,7 +36,7 @@ data:
     base_dir_2d: /mnt/hdd/ncut_features/2d/lseg
     coords_filename_2d: coords.npy
     features_filename_2d: lseg_feats.npy
-    skip: 50 # should usually be 1, or just delete it
+    skip: 1 # should usually be 1, or just delete it
   dataloader:
     _target_: torch.utils.data.DataLoader
     batch_size: 1

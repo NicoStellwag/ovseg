@@ -3,8 +3,11 @@
 # these parameters are inherited by datasets, data_loaders and collators
 # but they might be overwritten
 
+# other dirs
+feature_dim_reduction_path: /mnt/hdd/self_training_initial/pca.pkl
+
 # splits
-train_mode: train
+train_mode: train_validation
 validation_mode: validation
 test_mode: validation # test  # validation
 
@@ -14,15 +17,15 @@ add_raw_coordinates: true # 3dim
 add_colors: true # 3dim
 add_normals: false # 3dim
 in_channels: 3 # in_channels = 3 * (add_normals + add_colors + add_raw_coordinates)
-num_labels: 20
-# num_labels: 41
+num_labels: 200
 add_instance: ${general.add_instance}
 task: ${general.task}
+dim_reduce: false
 
 # data loader
 pin_memory: false
 num_workers: 4
-batch_size: 5
+batch_size: 3
 test_batch_size: 1
 cache_data: false
 
@@ -31,6 +34,7 @@ voxel_size: 0.02
 
 reps_per_epoch: ${general.reps_per_epoch}
 
+ds_cache_data: true # must be true if cropping is true
 cropping: false
 cropping_args:
   min_points: 30000

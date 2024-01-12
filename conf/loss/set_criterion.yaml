@@ -1,5 +1,5 @@
 # @package _group_
-_target_: models.criterion.SetCriterion
+_target_: ovseg.models.openvocab_criterion.OpenVocabSetCriterion
 num_classes: ${general.num_targets}
 eos_coef: 0.1
 losses:

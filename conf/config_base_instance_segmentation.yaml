@@ -1,24 +1,25 @@
 general:
   train_mode: true
   task: "instance_segmentation"
-  seed: null
+  seed: 42
   checkpoint: null
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer
   linear_probing_backbone: false
-  train_on_segments: false
-  eval_on_segments: false
+  train_on_segments: true
+  eval_on_segments: true
   filter_out_instances: false
   save_visualizations: false
   visualization_point_size: 20
   decoder_id: -1
   export: false
-  use_dbscan: false
+  export_root_path: /mnt/hdd/eval_output
+  use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100
-  project_name: scannet
-  workspace: jonasschult
-  experiment_name: DEBUG_ABLATION
-  num_targets: 19
+  project_name: ovseg
+  workspace: ovseg
+  experiment_name: ???
+  num_targets: 201 # model output dim is hardcoded to 128, we want to evaluate on scannet200 though
   add_instance: true
   dbscan_eps: 0.95
   dbscan_min_points: 1
@@ -54,7 +55,7 @@ general:
 defaults:
   - data: indoor
   - data/data_loaders: simple_loader
-  - data/datasets: scannet
+  - data/datasets: openvocab_scannet200
   - data/collation_functions: voxelize_collate
   - logging: full
   - model: mask3d

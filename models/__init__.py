@@ -9,7 +9,7 @@ from models.res16unet import (
     Res16UNet18B,
     Custom30M,
 )
-import models.mask3d as mask3d
+from models.mask3d import Mask3D
 
 MODELS = []
 

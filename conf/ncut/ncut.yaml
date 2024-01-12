@@ -16,7 +16,8 @@ data:
   dataset:
     _target_: ncut.ncut_datasets.NormalizedCutDataset
     scannet_base_dir: /mnt/hdd/scannet
-    mode: train
+    scannet_preprocessed_base_dir: /mnt/hdd/scannet200_preprocessed
+    mode: val
     segments_base_dir: /mnt/hdd/scannet_segments
     base_dir_3d: /mnt/hdd/ncut_features/3d/csc
     coords_filename_3d: coords.npy

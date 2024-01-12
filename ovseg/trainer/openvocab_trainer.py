@@ -875,7 +875,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             if self.config.general.filter_out_instances:
                 keep_instances = set()
                 pairwise_overlap = sorted_masks.T @ sorted_masks
-                normalization = pairwise_overlap.max(axis=0)
+                normalization = pairwise_overlap.max(axis=0) + 1e-6
                 norm_overlaps = pairwise_overlap / normalization
 
                 for instance_id in range(norm_overlaps.shape[0]):

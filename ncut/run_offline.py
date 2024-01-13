@@ -633,7 +633,8 @@ def mean_instance_feature(segment_featues, segmentwise_instances):
         instance = np.argmax(segmentwise_instances[i])
         aggr_labels[instance] += s_feat
         counts[instance] += 1
-    return aggr_labels / (counts + 1e-8)
+    nonzero_instances = np.argwhere(counts != 0)
+    return aggr_labels / (counts + 1e-8), nonzero_instances[:,0]
 
 
 @hydra.main(config_path="../conf", config_name="config_base_instance_segmentation.yaml")
@@ -741,12 +742,15 @@ def main(cfg):
             pointwise_instances = np.zeros(shape=(n_points, n_instances), dtype=int)
             pointwise_instances[np.arange(n_points), gt_instances] = 1
             pointwise_instances[gt_instances == -1] = 0
+        
 
         # get labels by taking mean 2d feature over segments of instances
-        labels = mean_instance_feature(
+        labels, nonzero_instances = mean_instance_feature(
             segment_featues=segment_feats_2d.cpu().numpy(),
             segmentwise_instances=segmentwise_instances,
         )  # np(n_instances, dim_feat_2d)
+        labels = labels[nonzero_instances]
+        pointwise_instances = pointwise_instances[:,nonzero_instances]
 
         # save everything as np arrays
         scan_dir = os.path.join(cfg.ncut.save_dir, scene_name)

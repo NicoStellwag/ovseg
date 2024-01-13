@@ -1204,7 +1204,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                                     np.array((float(ap), float(ap_50), float(ap_25)))
                                 )
                             else:
-                                assert (False, "class not known!")
+                                assert False, "class not known!"
                     else:
                         ap_results[f"{log_prefix}_{class_name}_val_ap"] = float(ap)
                         ap_results[f"{log_prefix}_{class_name}_val_ap_50"] = float(

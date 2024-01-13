@@ -67,8 +67,9 @@ defaults:
   - matcher: hungarian_matcher
   - loss: set_criterion
   - ncut: ncut
+  - ncut/eval: lseg_spectral_clustering
   - ncut/feature_extraction_3d: csc
-  - ncut/feature_extraction_3d/model: Res16UNet34C # todo make Res...D work
+  - ncut/feature_extraction_3d/model: Res16UNet34C
   - ncut/feature_extraction_2d: lseg
 
 hydra:

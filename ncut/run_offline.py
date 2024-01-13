@@ -634,7 +634,7 @@ def mean_instance_feature(segment_featues, segmentwise_instances):
         aggr_labels[instance] += s_feat
         counts[instance] += 1
     nonzero_instances = np.argwhere(counts != 0)
-    return aggr_labels / (counts + 1e-8), nonzero_instances[:,0]
+    return aggr_labels / (counts + 1e-8), nonzero_instances[:, 0]
 
 
 @hydra.main(config_path="../conf", config_name="config_base_instance_segmentation.yaml")
@@ -664,7 +664,7 @@ def main(cfg):
         )  # tens(-1, 2)
         scene_name = sample["scene_name"][0]
 
-        if cfg.ncut.use_ds_gt_segmentation:
+        if not cfg.ncut.use_ds_gt_segmentation:
             # segment scene using normalized cut
             (
                 bipartitions,  # np(n_instances, n_segments) col-wise one hot representation of instance
@@ -694,7 +694,7 @@ def main(cfg):
             pointwise_instances = segmentwise_instances[segment_indices].astype(
                 int
             )  # np(n_points, n_instances) row-wise one hot representation of instances
-        else:  # for val use ground truth masks
+        else:
             # aggregate features over segments
             segment_feats_2d, unique_segments = aggregate_features(
                 feats_2d, segment_ids, segment_connectivity, cfg
@@ -742,7 +742,6 @@ def main(cfg):
             pointwise_instances = np.zeros(shape=(n_points, n_instances), dtype=int)
             pointwise_instances[np.arange(n_points), gt_instances] = 1
             pointwise_instances[gt_instances == -1] = 0
-        
 
         # get labels by taking mean 2d feature over segments of instances
         labels, nonzero_instances = mean_instance_feature(
@@ -750,7 +749,7 @@ def main(cfg):
             segmentwise_instances=segmentwise_instances,
         )  # np(n_instances, dim_feat_2d)
         labels = labels[nonzero_instances]
-        pointwise_instances = pointwise_instances[:,nonzero_instances]
+        pointwise_instances = pointwise_instances[:, nonzero_instances]
 
         # save everything as np arrays
         scan_dir = os.path.join(cfg.ncut.save_dir, scene_name)

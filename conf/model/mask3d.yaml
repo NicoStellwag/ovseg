@@ -1,5 +1,5 @@
 # @package _group_
-_target_: models.Mask3D
+_target_: ovseg.models.openvocab_mask3d.Mask3D
 
 # transformer parameters
 hidden_dim: 128
@@ -45,3 +45,6 @@ config:
     in_channels: ${data.in_channels}
     out_channels: ${data.num_labels}
     out_fpn: true
+
+# mask module feature vec MLP
+dropout_before_instance_feature_mlp: 0.3

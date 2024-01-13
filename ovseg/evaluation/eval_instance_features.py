@@ -26,7 +26,6 @@ def main(cfg: DictConfig):
     )
 
     class_cos_sims = {}
-    class_counts = {}
 
     for batch in tqdm(loader):
         _, target, _ = batch
@@ -54,16 +53,18 @@ def main(cfg: DictConfig):
                 print(
                     f"0 for label feat sum {label_features[i].sum()} and instance feat sum {instance_features[i].sum()}"
                 )
-            if c_id not in class_counts:
-                class_counts[c_id] = 1
-                class_cos_sims[c_id] = cos_sims[i]
+            if c_id not in class_cos_sims:
+                class_cos_sims[c_id] = [cos_sims[i]]
             else:
-                class_counts[c_id] += 1
-                class_cos_sims[c_id] += cos_sims[i]
+                class_cos_sims[c_id].append(cos_sims[i])
 
-    for c_id in class_counts:
-        mean_cos_sim = class_cos_sims[c_id] / class_counts[c_id]
-        print(f"{c_id: <10}{ds.label_info[c_id]['name']: <30}{mean_cos_sim: <10.4f}")
+    for c_id, sims_list in class_cos_sims.items():
+        sims = np.array(sims_list)
+        mean = sims.mean()
+        std = sims.std()
+        print(
+            f"{c_id: <10}{ds.label_info[c_id]['name']: <30} mean: {mean: <10.4f} stddev: {std: <10.4f}"
+        )
 
 
 if __name__ == "__main__":

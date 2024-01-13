@@ -41,8 +41,11 @@ def dice_loss(
     inputs = inputs.flatten(1)
     numerator = 2 * (inputs * targets).sum(-1)
     denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = weights * (1 - (numerator + 1) / (denominator + 1))
-    return loss.sum() / num_masks # todo maybe take mean only over non masked samples
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    masked_loss = weights * loss
+    return (
+        masked_loss.sum() / num_masks
+    )  # todo maybe take mean only over non masked samples
 
 
 dice_loss_jit = torch.jit.script(dice_loss)  # type: torch.jit.ScriptModule
@@ -64,9 +67,11 @@ def sigmoid_ce_loss(
     Returns:
         Loss tensor
     """
-    loss = weights.view(-1, 1) * F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-
-    return loss.mean(1).sum() / num_masks # todo maybe take mean only over non masked samples
+    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    masked_loss = weights.view(-1, 1) * loss
+    return (
+        masked_loss.mean(1).sum() / num_masks
+    )  # todo maybe take mean only over non masked samples
 
 
 sigmoid_ce_loss_jit = torch.jit.script(sigmoid_ce_loss)  # type: torch.jit.ScriptModule
@@ -224,15 +229,17 @@ class OpenVocabSetCriterion(nn.Module):
                     target_mask.shape[1], device=target_mask.device
                 )
 
-            num_masks = target_mask.shape[0]
             map = map[:, point_idx]
             target_mask = target_mask[:, point_idx].float()
 
-            pred_foreground = map > 0.
-            iou_scores = (pred_foreground * target_mask).sum(dim=1) / (pred_foreground + target_mask).sum(dim=1)
+            pred_foreground = map > 0.0
+            iou_scores = (pred_foreground * target_mask).sum(dim=1) / (
+                pred_foreground + target_mask
+            ).sum(dim=1)
             weights = (iou_scores >= self.droploss_iou_thresh).float()
             target_mask = target_mask.float()
 
+            num_masks = weights.sum() + 1e-8  # account for dropped masks
             loss_masks.append(sigmoid_ce_loss_jit(map, target_mask, num_masks, weights))
             loss_dices.append(dice_loss_jit(map, target_mask, num_masks, weights))
 

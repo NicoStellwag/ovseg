@@ -34,8 +34,8 @@ train_dataset:
   is_tta: false
   crop_min_size: ${data.crop_min_size}
   crop_length: ${data.crop_length}
-  filter_out_classes: [0, 2]
-  label_offset: 2
+  filter_out_classes: []
+  label_offset: 0
 
 validation_dataset:
   _target_: ovseg.datasets.openvocab_semseg.OpenVocabSemanticSegmentationDataset

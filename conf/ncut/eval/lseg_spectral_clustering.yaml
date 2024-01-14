@@ -54,8 +54,10 @@ ncut_data:
     is_tta: false
     crop_min_size: ${data.crop_min_size}
     crop_length: ${data.crop_length}
-    filter_out_classes: [0, 2]
-    label_offset: 2
+    # filter_out_classes: [0, 2]
+    # label_offset: 2
+    filter_out_classes: []
+    label_offset: 0
   dataloader:
     _target_: torch.utils.data.DataLoader
     batch_size: 1

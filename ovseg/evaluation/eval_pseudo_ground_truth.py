@@ -1,4 +1,5 @@
 import colorsys
+import math
 from typing import List, Tuple
 import hydra
 from omegaconf import DictConfig
@@ -9,7 +10,9 @@ import torch
 import torch.nn.functional as F
 import pyviz3d.visualizer as vis
 import random
+import json
 import functools
+from tqdm import tqdm
 
 
 @functools.lru_cache(20)
@@ -182,7 +185,70 @@ def save_visualizations(
                 point_size=point_size,
             )
 
-    v.save(os.path.join(save_base_dir, file_name))
+    v.save(os.path.join(save_base_dir, file_name), verbose=False)
+
+
+def get_predicted_class_ids(target_ncut, label_offset, ds_gt, ds_ncut, device, cfg):
+    ncut_instance_feats = target_ncut[0]["instance_feats"]
+    ncut_instance_feats = ncut_instance_feats.to(device)
+    ncut_instance_feats = F.normalize(ncut_instance_feats, p=2, dim=-1)
+
+    all_labels = np.arange(cfg.data.num_labels - label_offset)
+    all_labels[0] = -1  # chair fix
+    all_class_ids = ds_gt._remap_model_output(all_labels + label_offset)
+    all_text_label_feats = ds_ncut.map2features(
+        all_class_ids, ncut_instance_feats.device
+    )
+
+    cos_sims = ncut_instance_feats @ all_text_label_feats.T
+    pred_classes = cos_sims.argmax(dim=-1)
+    pred_classes[pred_classes == 0] = -1  # chair fix
+    pred_class_ids = ds_gt._remap_model_output(pred_classes.cpu() + label_offset)
+    return pred_class_ids
+
+
+def get_bbox_gt(gt_target_full_res, orig_coords):
+    bbox_data = []
+    for inst_id in range(gt_target_full_res["masks"].shape[0]):
+        if gt_target_full_res["labels"][inst_id].item() == 255:
+            continue
+
+        obj_coords = orig_coords[
+            gt_target_full_res["masks"][inst_id, :].cpu().detach().numpy().astype(bool),
+            :,
+        ]
+        if obj_coords.shape[0] > 0:
+            obj_center = obj_coords.mean(axis=0)
+            obj_axis_length = obj_coords.max(axis=0) - obj_coords.min(axis=0)
+
+            bbox = np.concatenate((obj_center, obj_axis_length))
+            bbox_data.append(
+                (
+                    gt_target_full_res["labels"][inst_id].item(),
+                    bbox,
+                )
+            )
+    return bbox_data
+
+
+def get_bbox_ncut(ncut_target_full_res, orig_coords, pred_class_ids):
+    bbox_data = []
+    for inst_id in range(ncut_target_full_res["masks"].shape[0]):
+        obj_coords = orig_coords[
+            ncut_target_full_res["masks"][inst_id, :]
+            .cpu()
+            .detach()
+            .numpy()
+            .astype(bool),
+            :,
+        ]
+        if obj_coords.shape[0] > 0:
+            obj_center = obj_coords.mean(axis=0)
+            obj_axis_length = obj_coords.max(axis=0) - obj_coords.min(axis=0)
+
+            bbox = np.concatenate((obj_center, obj_axis_length))
+            bbox_data.append((pred_class_ids[inst_id], bbox, 1.0))  # fake score of 1.0
+    return bbox_data
 
 
 @hydra.main(
@@ -193,10 +259,24 @@ def main(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     sys.path.append(hydra.utils.get_original_cwd())
 
-    c_fn_gt = hydra.utils.instantiate(cfg.data.validation_collation_original)
-    c_fn_ncut = hydra.utils.instantiate(cfg.data.validation_collation)
+    from utils.votenet_utils.eval_det import eval_det
+    from ovseg.benchmark.openvocab_evaluate_semantic_instance import evaluate
+    from datasets.scannet200.scannet200_splits import (
+        HEAD_CATS_SCANNET_200,
+        TAIL_CATS_SCANNET_200,
+        COMMON_CATS_SCANNET_200,
+        VALID_CLASS_IDS_200_VALIDATION,
+    )
+
     ds_gt = hydra.utils.instantiate(cfg.ncut.eval.gt_data.dataset)
     ds_ncut = hydra.utils.instantiate(cfg.ncut.eval.ncut_data.dataset)
+    c_fn_gt = hydra.utils.instantiate(
+        cfg.data.validation_collation_original,
+        filter_out_classes=ds_gt.filter_out_classes,
+    )
+    c_fn_ncut = hydra.utils.instantiate(
+        cfg.data.validation_collation, filter_out_classes=ds_ncut.filter_out_classes
+    )
     loader_gt = hydra.utils.instantiate(
         cfg.ncut.eval.gt_data.dataloader,
         dataset=ds_gt,
@@ -207,46 +287,37 @@ def main(cfg: DictConfig):
         dataset=ds_ncut,
         collate_fn=c_fn_ncut,
     )
+    assert len(loader_gt) == len(loader_ncut), "different number of scenes in datasets"
 
     device = torch.device("cuda:0")
 
     label_offset = ds_gt.label_offset
 
-    for batch_gt, batch_ncut in zip(loader_gt, loader_ncut):
-        data_gt, target_gt, filenames_gt = batch_gt
+    print("Calculate bounding boxes over dataset...")
+    bbox_gt = {}
+    bbox_ncut = {}
+    preds = {}
+    for i, (batch_gt, batch_ncut) in tqdm(
+        enumerate(zip(loader_gt, loader_ncut)), total=len(loader_gt)
+    ):
+        data_gt, _, file_names = batch_gt
         data_ncut, target_ncut, _ = batch_ncut
 
-        # compute predicted classes
-        ncut_instance_feats = target_ncut[0]["instance_feats"]
-        ncut_instance_feats = ncut_instance_feats.to(device)
-        ncut_instance_feats = F.normalize(ncut_instance_feats, p=2, dim=-1)
-
-        all_labels = np.arange(cfg.data.num_labels - label_offset)
-        all_labels[0] = -1  # chair fix
-        all_class_ids = ds_ncut._remap_model_output(all_labels + label_offset)
-        all_text_label_feats = ds_ncut.map2features(
-            all_class_ids, ncut_instance_feats.device
+        pred_class_ids = get_predicted_class_ids(
+            target_ncut, label_offset, ds_gt, ds_ncut, device, cfg
         )
 
-        cos_sims = ncut_instance_feats @ all_text_label_feats.T
-        pred_classes = cos_sims.argmax(dim=-1)
-        pred_classes[pred_classes == 0] = -1  # chair fix
-        pred_class_ids = ds_ncut._remap_model_output(pred_classes.cpu() + label_offset)
-
-        # print("all_labels", all_labels)
-        # print("all_class_ids", all_class_ids)
-        # print("pred_classes", pred_classes)
-        # print("pred class ids", pred_class_ids)
-
-        # visualize
+        # remap gt labels
         gt_target_full_res = data_gt.target_full[0]
         gt_target_full_res["labels"][gt_target_full_res["labels"] == 0] = -1
         gt_target_full_res["labels"] = ds_gt._remap_model_output(
             gt_target_full_res["labels"].cpu() + label_offset
         )
+
+        # visualize
         orig_coords = data_gt.original_coordinates[0]
         pred_masks = data_ncut.target_full[0]["masks"].T.numpy()
-        file_name = filenames_gt[0]
+        file_name = file_names[0]
         orig_colors = data_gt.original_colors[0]
         orig_normals = data_gt.original_normals[0]
         save_visualizations(
@@ -254,19 +325,145 @@ def main(cfg: DictConfig):
             full_res_coords=orig_coords,
             sorted_masks=[pred_masks],  # [np(n_points_full_res, n_pred_instances)]
             sort_classes=[pred_class_ids],  # [np(n_pred_instances)] - class ids
-            file_name=file_name,  # str (witout html ending)
+            file_name=file_name,  # str (dirname => without html ending)
             original_colors=orig_colors,  # np(n_points_full, 3)
             original_normals=orig_normals,  # np(n_points_full, 3)
             ds=ds_gt,
             save_base_dir=cfg.ncut.eval.res_dir,
         )
 
-        # remap gt labels
+        # generate bounding boxes for gt
+        bbox_gt[file_name] = get_bbox_gt(
+            gt_target_full_res, orig_coords
+        )  # [(class_id, (bbox_center, bb_axis_len)), ...]
 
         # generate bounding boxes for ncut
+        ncut_target_full_res = data_ncut.target_full[0]
+        bbox_ncut[file_name] = get_bbox_ncut(
+            ncut_target_full_res, orig_coords, pred_class_ids
+        )  # [(class_id, (bbox_center, bb_axis_len)), ...]
 
-        # generate bounding boxes for gt
-        exit(0)
+        # generate preds dict for mask3d evaluation implementation
+        n_inst = ncut_target_full_res["masks"].shape[0]
+        preds[file_name] = {
+            "pred_masks": pred_masks,
+            "pred_scores": np.full(fill_value=1.0, shape=(n_inst)),
+            "pred_classes": pred_class_ids,
+        }
+
+    # calc ap
+    log_prefix = f"val"
+    ap_results = {}
+    (
+        box_rec_25,  # {class_id: np(n_inst_class)}
+        box_prec_25,  # {class_id: np(n_inst_class)}
+        box_ap_25,  # {class_id: float}
+    ) = eval_det(bbox_ncut, bbox_gt, ovthresh=0.25, use_07_metric=False)
+    (
+        box_rec_50,
+        box_prec_50,
+        box_ap_50,
+    ) = eval_det(bbox_ncut, bbox_gt, ovthresh=0.5, use_07_metric=False)
+    mean_box_ap_25 = sum([v for k, v in box_ap_25.items()]) / len(
+        box_ap_25.keys()
+    )  # float
+    mean_box_ap_50 = sum([v for k, v in box_ap_50.items()]) / len(box_ap_50.keys())
+    ap_results[f"{log_prefix}_mean_box_ap_25"] = mean_box_ap_25
+    ap_results[f"{log_prefix}_mean_box_ap_50"] = mean_box_ap_50
+    for class_id in box_ap_50.keys():
+        class_name = ds_gt.label_info[class_id]["name"]
+        ap_results[f"{log_prefix}_{class_name}_val_box_ap_50"] = box_ap_50[class_id]
+    for class_id in box_ap_25.keys():
+        class_name = ds_gt.label_info[class_id]["name"]
+        ap_results[f"{log_prefix}_{class_name}_val_box_ap_25"] = box_ap_25[class_id]
+
+    # scannet evaluation (split into head, common, tail classes and so on)
+    base_path = cfg.ncut.eval.res_dir
+    gt_data_path = f"{ds_gt.data_dir[0]}/instance_gt/{ds_gt.mode}"
+    pred_path = f"{base_path}/tmp_output.txt"
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+    try:
+        evaluate(
+            preds,
+            gt_data_path,
+            pred_path,
+            dataset=ds_gt.dataset_name,
+        )
+        with open(pred_path, "r") as fin:
+            head_results, common_results, tail_results = [], [], []
+            for line_id, line in enumerate(fin):
+                if line_id == 0:
+                    # ignore header
+                    continue
+                class_name, _, ap, ap_50, ap_25 = line.strip().split(",")
+
+                if class_name in VALID_CLASS_IDS_200_VALIDATION:
+                    ap_results[f"{log_prefix}_{class_name}_val_ap"] = float(ap)
+                    ap_results[f"{log_prefix}_{class_name}_val_ap_50"] = float(ap_50)
+                    ap_results[f"{log_prefix}_{class_name}_val_ap_25"] = float(ap_25)
+
+                    if class_name in HEAD_CATS_SCANNET_200:
+                        head_results.append(
+                            np.array((float(ap), float(ap_50), float(ap_25)))
+                        )
+                    elif class_name in COMMON_CATS_SCANNET_200:
+                        common_results.append(
+                            np.array((float(ap), float(ap_50), float(ap_25)))
+                        )
+                    elif class_name in TAIL_CATS_SCANNET_200:
+                        tail_results.append(
+                            np.array((float(ap), float(ap_50), float(ap_25)))
+                        )
+                    else:
+                        assert False, "class not known!"
+        head_results = np.stack(head_results)
+        common_results = np.stack(common_results)
+        tail_results = np.stack(tail_results)
+
+        mean_tail_results = np.nanmean(tail_results, axis=0)
+        mean_common_results = np.nanmean(common_results, axis=0)
+        mean_head_results = np.nanmean(head_results, axis=0)
+
+        ap_results[f"{log_prefix}_mean_tail_ap_25"] = mean_tail_results[0]
+        ap_results[f"{log_prefix}_mean_common_ap_25"] = mean_common_results[0]
+        ap_results[f"{log_prefix}_mean_head_ap_25"] = mean_head_results[0]
+
+        ap_results[f"{log_prefix}_mean_tail_ap_50"] = mean_tail_results[1]
+        ap_results[f"{log_prefix}_mean_common_ap_50"] = mean_common_results[1]
+        ap_results[f"{log_prefix}_mean_head_ap_50"] = mean_head_results[1]
+
+        ap_results[f"{log_prefix}_mean_tail_ap_25"] = mean_tail_results[2]
+        ap_results[f"{log_prefix}_mean_common_ap_25"] = mean_common_results[2]
+        ap_results[f"{log_prefix}_mean_head_ap_25"] = mean_head_results[2]
+
+        overall_ap_results = np.nanmean(
+            np.vstack((head_results, common_results, tail_results)),
+            axis=0,
+        )
+
+        ap_results[f"{log_prefix}_mean_ap"] = overall_ap_results[0]
+        ap_results[f"{log_prefix}_mean_ap_50"] = overall_ap_results[1]
+        ap_results[f"{log_prefix}_mean_ap_25"] = overall_ap_results[2]
+
+        ap_results = {
+            key: 0.0 if math.isnan(score) else score
+            for key, score in ap_results.items()
+        }
+    except (IndexError, OSError) as e:
+        print("NO SCORES!!!")
+        ap_results[f"{log_prefix}_mean_ap"] = 0.0
+        ap_results[f"{log_prefix}_mean_ap_50"] = 0.0
+        ap_results[f"{log_prefix}_mean_ap_25"] = 0.0
+
+    formatted_ap_results = json.dumps(ap_results, sort_keys=True, indent=4)
+    with open(os.path.join(base_path, "scannet_eval_results.json"), "w") as fl:
+        fl.write(formatted_ap_results)
+    print(formatted_ap_results)
+
+    print()
+    print("=====================")
+    print("Results saved under:", base_path)
 
 
 if __name__ == "__main__":

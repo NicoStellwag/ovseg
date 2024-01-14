@@ -460,7 +460,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     point_size=point_size,
                 )
 
-        v.save(f"{self.config['general']['save_dir']}/visualizations/{file_name}")
+        v.save(
+            f"{self.config['general']['save_dir']}/visualizations/{file_name}",
+            verbose=False,
+        )
 
     # * nothing changed
     def eval_step(self, batch, batch_idx):

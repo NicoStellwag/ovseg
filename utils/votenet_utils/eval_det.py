@@ -84,9 +84,7 @@ def get_iou_main(get_iou_func, args):
     return get_iou_func(*args)
 
 
-def eval_det_cls(
-    pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_iou
-):
+def eval_det_cls(pred, gt, ovthresh=0.25, use_07_metric=False, get_iou_func=get_iou):
     """Generic functions to compute precision/recall for object detection
     for a single class.
     Input:
@@ -163,7 +161,7 @@ def eval_det_cls(
     # compute precision recall
     fp = np.cumsum(fp)
     tp = np.cumsum(tp)
-    rec = tp / float(npos)
+    rec = tp / max(float(npos), 1e-8)
     # print('NPOS: ', npos)
     # avoid divide by zero in case the first detection matches a difficult
     # ground truth
@@ -175,9 +173,7 @@ def eval_det_cls(
 
 def eval_det_cls_wrapper(arguments):
     pred, gt, ovthresh, use_07_metric, get_iou_func = arguments
-    rec, prec, ap = eval_det_cls(
-        pred, gt, ovthresh, use_07_metric, get_iou_func
-    )
+    rec, prec, ap = eval_det_cls(pred, gt, ovthresh, use_07_metric, get_iou_func)
     return (rec, prec, ap)
 
 

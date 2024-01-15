@@ -1182,7 +1182,16 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     if line_id == 0:
                         # ignore header
                         continue
-                    class_name, _, ap, ap_50, ap_25 = line.strip().split(",")
+                    (
+                        class_name,
+                        class_id,
+                        ap,
+                        ap_50,
+                        ap_25,
+                        ar,
+                        ar_50,
+                        ar_25,
+                    ) = line.strip().split(",")
 
                     if "scannet200" in self.validation_dataset.dataset_name:
                         if class_name in VALID_CLASS_IDS_200_VALIDATION:

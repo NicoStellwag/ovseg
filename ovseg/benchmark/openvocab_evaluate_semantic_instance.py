@@ -31,6 +31,7 @@ import os, sys, argparse
 import inspect
 from copy import deepcopy
 from uuid import uuid4
+from pathlib import Path
 
 import torch
 
@@ -106,6 +107,7 @@ def evaluate_matches(matches):
 
     # results: class x overlap
     ap = np.zeros((len(dist_threshes), len(CLASS_LABELS), len(overlaps)), float)
+    ar = np.zeros((len(dist_threshes), len(CLASS_LABELS), len(overlaps)), float)
     for di, (min_region_size, distance_thresh, distance_conf) in enumerate(
         zip(min_region_sizes, dist_threshes, dist_confs)
     ):
@@ -269,32 +271,43 @@ def evaluate_matches(matches):
                     stepWidths = np.convolve(recall_for_conv, [-0.5, 0, 0.5], "valid")
                     # integrate is now simply a dot product
                     ap_current = np.dot(precision, stepWidths)
+                    ar_current = np.dot(recall, stepWidths)
 
                 elif has_gt:
                     ap_current = 0.0
+                    ar_current = float("nan")
                 else:
+                    ar_current = 0.0
                     ap_current = float("nan")
+
                 ap[di, li, oi] = ap_current
-    return ap
+                ar[di, li, oi] = ar_current
+
+    return ap, ar
 
 
-def compute_averages(aps):
+def compute_metric_averages(avg_values, metric="ap"):
     d_inf = 0
     o50 = np.where(np.isclose(opt["overlaps"], 0.5))
     o25 = np.where(np.isclose(opt["overlaps"], 0.25))
     oAllBut25 = np.where(np.logical_not(np.isclose(opt["overlaps"], 0.25)))
     avg_dict = {}
     # avg_dict['all_ap']     = np.nanmean(aps[ d_inf,:,:  ])
-    avg_dict["all_ap"] = np.nanmean(aps[d_inf, :, oAllBut25])
-    avg_dict["all_ap_50%"] = np.nanmean(aps[d_inf, :, o50])
-    avg_dict["all_ap_25%"] = np.nanmean(aps[d_inf, :, o25])
+    avg_dict[f"all_{metric}"] = np.nanmean(avg_values[d_inf, :, oAllBut25])
+    avg_dict[f"all_{metric}_50%"] = np.nanmean(avg_values[d_inf, :, o50])
+    avg_dict[f"all_{metric}_25%"] = np.nanmean(avg_values[d_inf, :, o25])
     avg_dict["classes"] = {}
     for li, label_name in enumerate(CLASS_LABELS):
         avg_dict["classes"][label_name] = {}
-        # avg_dict["classes"][label_name]["ap"]       = np.average(aps[ d_inf,li,  :])
-        avg_dict["classes"][label_name]["ap"] = np.average(aps[d_inf, li, oAllBut25])
-        avg_dict["classes"][label_name]["ap50%"] = np.average(aps[d_inf, li, o50])
-        avg_dict["classes"][label_name]["ap25%"] = np.average(aps[d_inf, li, o25])
+        avg_dict["classes"][label_name][f"{metric}"] = np.average(
+            avg_values[d_inf, li, oAllBut25]
+        )
+        avg_dict["classes"][label_name][f"{metric}50%"] = np.average(
+            avg_values[d_inf, li, o50]
+        )
+        avg_dict["classes"][label_name][f"{metric}25%"] = np.average(
+            avg_values[d_inf, li, o25]
+        )
     return avg_dict
 
 
@@ -355,6 +368,7 @@ def assign_instances_for_scan(pred: dict, gt_file: str):
 
         pred_instance = {}
         pred_instance["uuid"] = uuid
+        pred_instance["scene_id"] = gt_file.split("/")[-1].split(".")[0]
         pred_instance["pred_id"] = num_pred_instances
         pred_instance["label_id"] = label_id
         pred_instance["vert_count"] = num
@@ -384,61 +398,153 @@ def assign_instances_for_scan(pred: dict, gt_file: str):
     return gt2pred, pred2gt
 
 
-def print_results(avgs):
+def assign_instances_for_scan_with_gt(pred: dict, gt_ids):
+    pred_info = make_pred_info(pred)
+
+    # get gt instances
+    gt_instances = util_3d.get_instances(
+        gt_ids, VALID_CLASS_IDS, CLASS_LABELS, ID_TO_LABEL
+    )
+    # associate
+    gt2pred = deepcopy(gt_instances)
+    for label in gt2pred:
+        for gt in gt2pred[label]:
+            gt["matched_pred"] = []
+    pred2gt = {}
+    for label in CLASS_LABELS:
+        pred2gt[label] = []
+    num_pred_instances = 0
+    # mask of void labels in the groundtruth
+    bool_void = np.logical_not(np.in1d(gt_ids // 1000, VALID_CLASS_IDS))
+    # go thru all prediction masks
+    for uuid in pred_info:
+        label_id = int(pred_info[uuid]["label_id"])
+        conf = pred_info[uuid]["conf"]
+        if not label_id in ID_TO_LABEL:
+            continue
+        label_name = ID_TO_LABEL[label_id]
+        # read the mask
+        pred_mask = pred_info[uuid]["mask"]
+        # assert(len(pred_mask) == len(gt_ids))
+        if len(pred_mask) != len(gt_ids):  # uncomment to avoid assert
+            print(f"Problem with {uuid}")
+            continue
+
+        # convert to binary
+        pred_mask = np.not_equal(pred_mask, 0)
+        num = np.count_nonzero(pred_mask)
+        if num < opt["min_region_sizes"][0]:
+            continue  # skip if empty
+
+        pred_instance = {}
+        pred_instance["uuid"] = uuid
+        pred_instance["pred_id"] = num_pred_instances
+        pred_instance["label_id"] = label_id
+        pred_instance["vert_count"] = num
+        pred_instance["confidence"] = conf
+        pred_instance["void_intersection"] = np.count_nonzero(
+            np.logical_and(bool_void, pred_mask)
+        )
+
+        # matched gt instances
+        matched_gt = []
+        # go thru all gt instances with matching label
+        for gt_num, gt_inst in enumerate(gt2pred[label_name]):
+            intersection = np.count_nonzero(
+                np.logical_and(gt_ids == gt_inst["instance_id"], pred_mask)
+            )
+            if intersection > 0:
+                gt_copy = gt_inst.copy()
+                pred_copy = pred_instance.copy()
+                gt_copy["intersection"] = intersection
+                pred_copy["intersection"] = intersection
+                matched_gt.append(gt_copy)
+                gt2pred[label_name][gt_num]["matched_pred"].append(pred_copy)
+        pred_instance["matched_gt"] = matched_gt
+        num_pred_instances += 1
+        pred2gt[label_name].append(pred_instance)
+
+    return gt2pred, pred2gt
+
+
+def print_metric_results(avgs, metric="ap"):
     sep = ""
     col1 = ":"
     lineLen = 64 + 15
+
+    upper_metric = metric.upper()
+    lower_metric = metric.lower()
 
     print("")
     print("#" * lineLen)
     line = ""
     line += "{:<30}".format("what") + sep + col1
-    line += "{:>15}".format("AP") + sep
-    line += "{:>15}".format("AP_50%") + sep
-    line += "{:>15}".format("AP_25%") + sep
+    line += "{:>15}".format(f"{upper_metric}") + sep
+    line += "{:>15}".format(f"{upper_metric}_50%") + sep
+    line += "{:>15}".format(f"{upper_metric}_25%") + sep
     print(line)
     print("#" * lineLen)
 
     for li, label_name in enumerate(CLASS_LABELS):
-        ap_avg = avgs["classes"][label_name]["ap"]
-        ap_50o = avgs["classes"][label_name]["ap50%"]
-        ap_25o = avgs["classes"][label_name]["ap25%"]
+        avg = avgs["classes"][label_name][f"{lower_metric}"]
+        avg_50o = avgs["classes"][label_name][f"{lower_metric}50%"]
+        avg_25o = avgs["classes"][label_name][f"{lower_metric}25%"]
         line = "{:<30}".format(label_name) + sep + col1
-        line += sep + "{:>15.3f}".format(ap_avg) + sep
-        line += sep + "{:>15.3f}".format(ap_50o) + sep
-        line += sep + "{:>15.3f}".format(ap_25o) + sep
+        line += sep + "{:>15.3f}".format(avg) + sep
+        line += sep + "{:>15.3f}".format(avg_50o) + sep
+        line += sep + "{:>15.3f}".format(avg_25o) + sep
         print(line)
 
-    all_ap_avg = avgs["all_ap"]
-    all_ap_50o = avgs["all_ap_50%"]
-    all_ap_25o = avgs["all_ap_25%"]
+    all_avg = avgs[f"all_{lower_metric}"]
+    all_50o = avgs[f"all_{lower_metric}_50%"]
+    all_25o = avgs[f"all_{lower_metric}_25%"]
 
     print("-" * lineLen)
     line = "{:<30}".format("average") + sep + col1
-    line += "{:>15.3f}".format(all_ap_avg) + sep
-    line += "{:>15.3f}".format(all_ap_50o) + sep
-    line += "{:>15.3f}".format(all_ap_25o) + sep
+    line += "{:>15.3f}".format(all_avg) + sep
+    line += "{:>15.3f}".format(all_50o) + sep
+    line += "{:>15.3f}".format(all_25o) + sep
     print(line)
     print("")
 
 
-def write_result_file(avgs, filename):
+def write_result_file(avg_aps, avg_ars, filename):
     _SPLITTER = ","
     with open(filename, "w") as f:
-        f.write(_SPLITTER.join(["class", "class id", "ap", "ap50", "ap25"]) + "\n")
+        f.write(
+            _SPLITTER.join(
+                ["class", "class id", "ap", "ap50", "ap25", "ar", "ar50", "ar25"]
+            )
+            + "\n"
+        )
         for i in range(len(VALID_CLASS_IDS)):
             class_name = CLASS_LABELS[i]
             class_id = VALID_CLASS_IDS[i]
-            ap = avgs["classes"][class_name]["ap"]
-            ap50 = avgs["classes"][class_name]["ap50%"]
-            ap25 = avgs["classes"][class_name]["ap25%"]
+            ap = avg_aps["classes"][class_name]["ap"]
+            ap50 = avg_aps["classes"][class_name]["ap50%"]
+            ap25 = avg_aps["classes"][class_name]["ap25%"]
+            ar = avg_ars["classes"][class_name]["ar"]
+            ar50 = avg_ars["classes"][class_name]["ar50%"]
+            ar25 = avg_ars["classes"][class_name]["ar25%"]
             f.write(
-                _SPLITTER.join([str(x) for x in [class_name, class_id, ap, ap50, ap25]])
+                _SPLITTER.join(
+                    [
+                        str(x)
+                        for x in [class_name, class_id, ap, ap50, ap25, ar, ar50, ar25]
+                    ]
+                )
                 + "\n"
             )
 
 
-def evaluate(preds: dict, gt_path: str, output_file: str, dataset: str = "scannet"):
+def evaluate(
+    preds: dict,
+    gt_path: str,
+    output_file: str,
+    dataset: str = "scannet",
+    gt_dict: dict = None,
+    print_scene_results: bool = False,
+):
     global CLASS_LABELS
     global VALID_CLASS_IDS
     global ID_TO_LABEL
@@ -916,6 +1022,15 @@ def evaluate(preds: dict, gt_path: str, output_file: str, dataset: str = "scanne
             LABEL_TO_ID[CLASS_LABELS[i]] = VALID_CLASS_IDS[i]
             ID_TO_LABEL[VALID_CLASS_IDS[i]] = CLASS_LABELS[i]
 
+    if dataset == "freemask":
+        CLASS_LABELS = ["foreground"]
+        VALID_CLASS_IDS = np.array([1])
+        ID_TO_LABEL = {}
+        LABEL_TO_ID = {}
+        for i in range(len(VALID_CLASS_IDS)):
+            LABEL_TO_ID[CLASS_LABELS[i]] = VALID_CLASS_IDS[i]
+            ID_TO_LABEL[VALID_CLASS_IDS[i]] = CLASS_LABELS[i]
+
     total_true = 0
     total_seen = 0
     NUM_CLASSES = len(VALID_CLASS_IDS)
@@ -1057,19 +1172,27 @@ def evaluate(preds: dict, gt_path: str, output_file: str, dataset: str = "scanne
 
         matches_key = os.path.abspath(gt_file)
         # assign gt to predictions
-        gt2pred, pred2gt = assign_instances_for_scan(v, gt_file)
+        gt2pred, pred2gt = (
+            assign_instances_for_scan(v, gt_file)
+            if gt_dict is None
+            else assign_instances_for_scan_with_gt(v, gt_dict[k])
+        )
         matches[matches_key] = {}
         matches[matches_key]["gt"] = gt2pred
         matches[matches_key]["pred"] = pred2gt
         sys.stdout.write("\rscans processed: {}".format(i + 1))
         sys.stdout.flush()
+
     print("")
-    ap_scores = evaluate_matches(matches)
-    avgs = compute_averages(ap_scores)
+    ap_scores, ar_scores = evaluate_matches(matches)
+    avg_aps = compute_metric_averages(ap_scores, metric="ap")
+    avg_ars = compute_metric_averages(ar_scores, metric="ar")
 
     # print
-    print_results(avgs)
-    write_result_file(avgs, output_file)
+    print_metric_results(avg_aps, metric="ap")
+    print_metric_results(avg_ars, metric="ar")
+    write_result_file(avg_aps, avg_ars, output_file)
+    save_scene_results(matches, output_file)
 
     if dataset == "s3dis":
         MUCov = np.zeros(NUM_CLASSES)
@@ -1093,7 +1216,7 @@ def evaluate(preds: dict, gt_path: str, output_file: str, dataset: str = "scanne
 
         """
         LOG_FOUT = open(os.path.join('results_a5.txt'), 'w')
-    
+
         def log_string(out_str):
             LOG_FOUT.write(out_str + '\n')
             LOG_FOUT.flush()
@@ -1103,11 +1226,67 @@ def evaluate(preds: dict, gt_path: str, output_file: str, dataset: str = "scanne
         return np.mean(precision), np.mean(recall)
 
 
-# TODO: remove this
-# import pandas as pd
-# def main():
-#    print("!!! CLI is only for debugging purposes. use `evaluate()` instead.")
-#    evaluate(pd.read_pickle("/globalwork/schult/saved_predictions.pkl"), opt.gt_path, opt.output_file)
+def save_scene_results(matches, output_file):
+    _SPLITTER = ","
+    base_filename = Path(output_file).parent.absolute()
+    scene_metrics_fname = os.path.join(base_filename, "scene_metrics.csv")
+    with open(scene_metrics_fname, "w") as f:
+        f.write(
+            _SPLITTER.join(
+                [
+                    "class",
+                    "scene_name",
+                    "class id",
+                    "ap",
+                    "ap50",
+                    "ap25",
+                    "ar",
+                    "ar50",
+                    "ar25",
+                ]
+            )
+            + "\n"
+        )
 
-# if __name__ == '__main__':
-#    main()
+    for scene_path, scene_mathces in matches.items():
+        s_name = Path(scene_path).stem
+
+        scene_matches = {s_name: {}}
+        scene_matches[s_name]["gt"] = scene_mathces["gt"]
+        scene_matches[s_name]["pred"] = scene_mathces["pred"]
+
+        ap_scores, ar_scores = evaluate_matches(scene_matches)
+        avg_aps = compute_metric_averages(ap_scores, metric="ap")
+        avg_ars = compute_metric_averages(ar_scores, metric="ar")
+
+        with open(scene_metrics_fname, "a") as f:
+            for i in range(len(VALID_CLASS_IDS)):
+                class_name = CLASS_LABELS[i]
+                class_id = VALID_CLASS_IDS[i]
+                ap = avg_aps["classes"][class_name]["ap"]
+                ap50 = avg_aps["classes"][class_name]["ap50%"]
+                ap25 = avg_aps["classes"][class_name]["ap25%"]
+                ar = avg_ars["classes"][class_name]["ar"]
+                ar50 = avg_ars["classes"][class_name]["ar50%"]
+                ar25 = avg_ars["classes"][class_name]["ar25%"]
+                f.write(
+                    _SPLITTER.join(
+                        [
+                            str(x)
+                            for x in [
+                                class_name,
+                                s_name,
+                                class_id,
+                                ap,
+                                ap50,
+                                ap25,
+                                ar,
+                                ar50,
+                                ar25,
+                            ]
+                        ]
+                    )
+                    + "\n"
+                )
+
+        debug = 1

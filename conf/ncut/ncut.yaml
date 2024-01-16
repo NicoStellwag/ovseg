@@ -1,5 +1,5 @@
 # @package _group_
-save_dir: '/mnt/hdd/self_training_initial2'
+save_dir: '/mnt/hdd/self_training_initial'
 coords_filename: coords.npy
 instances_filename: pointwise_instances.npy
 labels_filename: instance_labels.npy
@@ -18,7 +18,7 @@ spectral_gmeans_tolerance: -1 # , -1 takes default, we likely want higher
 spectral_xmeans_tolerance: -1 # , -1 takes default, we likely want higher
 
 # iterative
-affinity_tau: 0.73
+affinity_tau: 0.70
 
 max_number_of_instances: 25
 min_segment_size: 4
@@ -30,7 +30,7 @@ data:
     _target_: ncut.ncut_datasets.NormalizedCutDataset
     scannet_base_dir: /mnt/hdd/scannet
     scannet_preprocessed_base_dir: /mnt/hdd/scannet200_preprocessed
-    mode: val
+    mode: train
     segments_base_dir: /mnt/hdd/scannet_segments
     base_dir_3d: /mnt/hdd/ncut_features/3d/csc
     coords_filename_3d: coords.npy

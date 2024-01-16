@@ -1,5 +1,5 @@
 # @package _group_
-base_dir: /mnt/hdd/ncut_eval/lseg_spectral_clustering
+base_dir: "/mnt/hdd/ncut_eval/lseg_iterative_0.50"
 res_dir: ${ncut.eval.base_dir}_results
 gt_data:
   dataset:

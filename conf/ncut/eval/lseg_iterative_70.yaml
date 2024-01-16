@@ -1,5 +1,6 @@
 # @package _group_
-tau: 0.5
+base_dir: "/mnt/hdd/ncut_eval/lseg_iterative_0.70"
+res_dir: ${ncut.eval.base_dir}_results
 gt_data:
   dataset:
     _target_: datasets.semseg.SemanticSegmentationDataset
@@ -32,7 +33,7 @@ ncut_data:
     _target_: ovseg.datasets.openvocab_semseg.OpenVocabSemanticSegmentationDataset
     dataset_name: "openvocab_scannet200"
     data_dir: /mnt/hdd/scannet200_preprocessed
-    ground_truth_dir: /mnt/hdd/ncut_eval/lseg_iterative_${ncut.eval.tau}
+    ground_truth_dir: ${ncut.eval.base_dir}
     point_instances_file: pointwise_instances.npy
     instance_labels_file: instance_labels.npy
     dim_reduce: ${data.dim_reduce}
@@ -53,8 +54,8 @@ ncut_data:
     is_tta: false
     crop_min_size: ${data.crop_min_size}
     crop_length: ${data.crop_length}
-    filter_out_classes: [0, 2]
-    label_offset: 2
+    filter_out_classes: []
+    label_offset: 0
   dataloader:
     _target_: torch.utils.data.DataLoader
     batch_size: 1

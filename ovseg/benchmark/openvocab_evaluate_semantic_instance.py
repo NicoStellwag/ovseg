@@ -543,8 +543,7 @@ def evaluate(
     output_file: str,
     dataset: str = "scannet",
     gt_dict: dict = None,
-    print_scene_results: bool = False,
-    natlang_category: bool = True
+    print_scene_results: bool = False
 ):
     global CLASS_LABELS
     global VALID_CLASS_IDS
@@ -613,7 +612,7 @@ def evaluate(
             ID_TO_LABEL[VALID_CLASS_IDS[i]] = CLASS_LABELS[i]
 
     if "scannet200" in dataset:
-        CLASS_LABELS_OLD = (
+        CLASS_LABELS = (
             "chair",
             "table",
             "door",
@@ -813,10 +812,6 @@ def evaluate(
             "luggage",
             "mattress",
         )
-        if(natlang_category):
-            CLASS_LABELS = tuple(["a " + label + " in a scene" for label in CLASS_LABELS_OLD])
-        else:
-            CLASS_LABELS = CLASS_LABELS_OLD
 
 
 
@@ -1276,13 +1271,12 @@ def save_scene_results(matches, output_file):
                 ar = avg_ars["classes"][class_name]["ar"]
                 ar50 = avg_ars["classes"][class_name]["ar50%"]
                 ar25 = avg_ars["classes"][class_name]["ar25%"]
-                write_name = class_name[2:].replace(" in a scene","")
                 f.write(
                     _SPLITTER.join(
                         [
                             str(x)
                             for x in [
-                                write_name,
+                                class_name,
                                 s_name,
                                 class_id,
                                 ap,

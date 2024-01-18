@@ -814,7 +814,7 @@ def evaluate(
             "mattress",
         )
         if(natlang_category):
-            CLASS_LABELS = ["a " + label + " in a scene" for label in CLASS_LABELS_OLD]
+            CLASS_LABELS = tuple(["a " + label + " in a scene" for label in CLASS_LABELS_OLD])
         else:
             CLASS_LABELS = CLASS_LABELS_OLD
 

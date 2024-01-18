@@ -1276,12 +1276,13 @@ def save_scene_results(matches, output_file):
                 ar = avg_ars["classes"][class_name]["ar"]
                 ar50 = avg_ars["classes"][class_name]["ar50%"]
                 ar25 = avg_ars["classes"][class_name]["ar25%"]
+                write_name = class_name[2:].replace(" in a scene","")
                 f.write(
                     _SPLITTER.join(
                         [
                             str(x)
                             for x in [
-                                class_name,
+                                write_name,
                                 s_name,
                                 class_id,
                                 ap,

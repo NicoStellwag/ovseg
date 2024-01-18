@@ -544,6 +544,7 @@ def evaluate(
     dataset: str = "scannet",
     gt_dict: dict = None,
     print_scene_results: bool = False,
+    natlang_category: bool = True
 ):
     global CLASS_LABELS
     global VALID_CLASS_IDS
@@ -612,7 +613,7 @@ def evaluate(
             ID_TO_LABEL[VALID_CLASS_IDS[i]] = CLASS_LABELS[i]
 
     if "scannet200" in dataset:
-        CLASS_LABELS = (
+        CLASS_LABELS_OLD = (
             "chair",
             "table",
             "door",
@@ -812,6 +813,12 @@ def evaluate(
             "luggage",
             "mattress",
         )
+        if(natlang_category):
+            CLASS_LABELS = ["a " + label + " in a scene" for label in CLASS_LABELS_OLD]
+        else:
+            CLASS_LABELS = CLASS_LABELS_OLD
+
+
 
         VALID_CLASS_IDS = np.array(
             (

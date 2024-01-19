@@ -95,6 +95,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         add_clip=False,
         is_elastic_distortion=True,
         color_drop=0.0,
+        natlang_category=True
     ):
         assert task in [
             "instance_segmentation",
@@ -108,6 +109,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         ], "use normal dataset for test mode"
 
         self.add_clip = add_clip
+        self.natlang_category
         self.dataset_name = dataset_name
         self.is_elastic_distortion = is_elastic_distortion
         self.color_drop = color_drop
@@ -256,6 +258,11 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         clip_model, _ = clip.load("ViT-B/32", device=device)
 
         # get clip embeddings from label text
+        if(self.natlang_category):
+            text_labels = ["a " + i["name"] + " in a scene" for i in self._labels.values()]
+        else:
+            text_labels = [i["name"] for i in self._labels.values()]
+
         text_labels = [i["name"] for i in self._labels.values()]
         label_tokens = clip.tokenize(text_labels).to(device)
         with torch.no_grad():

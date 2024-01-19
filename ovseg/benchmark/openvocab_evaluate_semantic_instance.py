@@ -543,7 +543,7 @@ def evaluate(
     output_file: str,
     dataset: str = "scannet",
     gt_dict: dict = None,
-    print_scene_results: bool = False,
+    print_scene_results: bool = False
 ):
     global CLASS_LABELS
     global VALID_CLASS_IDS
@@ -812,6 +812,8 @@ def evaluate(
             "luggage",
             "mattress",
         )
+
+
 
         VALID_CLASS_IDS = np.array(
             (

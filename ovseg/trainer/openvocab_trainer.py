@@ -8,6 +8,7 @@ import math
 import pyviz3d.visualizer as vis
 from torch_scatter import scatter_mean
 import matplotlib
+from benchmark import util_3d
 from ovseg.benchmark.openvocab_evaluate_semantic_instance import evaluate
 from collections import defaultdict
 from sklearn.cluster import DBSCAN
@@ -1287,6 +1288,50 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     key: 0.0 if math.isnan(score) else score
                     for key, score in ap_results.items()
                 }
+            # class agnostic evaluation
+            class_agnostic_pred_path = f"{base_path}/tmp_output_class_agnostic.txt"
+            if self.config.general.class_agnostic_evaluation:
+                if "scannet200" in self.validation_dataset.dataset_name:
+                    # set all predicted and gt classes to the same value to become class agnostic
+                    # note that this should only be done after the real evaluation as it changes self.preds!
+                    gt_dict = {}
+                    for k, v in self.preds.items():
+                        n_points, n_instances = v["pred_masks"].shape
+                        v["pred_classes"] = np.full(
+                            shape=(n_instances,), fill_value=2  # first valid class id
+                        )
+                        gt_file = os.path.join(gt_data_path, k + ".txt")
+                        gt_ids = util_3d.load_ids(
+                            gt_file
+                        )  # instances are encoded in lower 3 digits, semantic classes in upper
+                        gt_dict[k] = (gt_ids % 1000) + 2000  # first valid class id
+                    evaluate(
+                        self.preds,
+                        gt_data_path,
+                        class_agnostic_pred_path,
+                        dataset=self.validation_dataset.dataset_name,
+                        gt_dict=gt_dict,
+                    )
+                    with open(pred_path, "r") as fin:
+                        it = iter(fin)
+                        next(it)  # skip header
+                        line = next(it)
+                        (
+                            _,
+                            _,
+                            ap,
+                            ap_50,
+                            ap_25,
+                            ar,
+                            ar_50,
+                            ar_25,
+                        ) = line.strip().split(",")
+                        ap_results[f"{log_prefix}_ap"] = float(ap)
+                        ap_results[f"{log_prefix}_ap_50"] = float(ap_50)
+                        ap_results[f"{log_prefix}_ap_25"] = float(ap_25)
+                    return ap_results
+                else:
+                    assert False, "class agnostic eval only implemented for scannet200"
         except (IndexError, OSError) as e:
             print("NO SCORES!!!")
             ap_results[f"{log_prefix}_mean_ap"] = 0.0

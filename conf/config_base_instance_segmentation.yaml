@@ -23,6 +23,7 @@ general:
   add_instance: true
   dbscan_eps: 0.95
   dbscan_min_points: 1
+  class_agnostic_evaluation: true
 
 
   export_threshold: 0.0001

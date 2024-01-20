@@ -1,26 +1,29 @@
 # @package _group_
-save_dir: '/mnt/hdd/self_training_initial'
+save_dir: '/mnt/hdd/ncut_eval_v2'
 coords_filename: coords.npy
 instances_filename: pointwise_instances.npy
 labels_filename: instance_labels.npy
-segment_visualization_filename: segments.html
-instance_visualization_filename: instances.html
+segment_visualization_filename: null
+instance_visualization_filename: null
 feature_extraction_2d: ???
 feature_extraction_3d: ???
 eval: ???
 use_ds_gt_segmentation: false # if true, aggregate features over ds ground truth instances
-method: iterative # iterative / spectral_clustering
+use_3d_feats: true
+dim_reduce_2d: -1 # -1 for keep full dim
+method: spectral_clustering # iterative / spectral_clustering
 
 # spectral clustering
 spectral_cluster_method: elbow # kmeans/ gmeans / xmeans / elbow
-spectral_kmeans_k: 15
+spectral_filter_instances: false
+spectral_kmeans_k: 20
 spectral_gmeans_tolerance: -1 # , -1 takes default, we likely want higher
 spectral_xmeans_tolerance: -1 # , -1 takes default, we likely want higher
 
 # iterative
 affinity_tau: 0.70
 
-max_number_of_instances: 25
+max_number_of_instances: 20
 min_segment_size: 4
 separation_mode: max
 max_extent_ratio: 0.8

@@ -1,3 +1,4 @@
+from sklearn.decomposition import PCA
 import torch
 import hydra
 import sys
@@ -10,6 +11,7 @@ from pyclustering.cluster.gmeans import gmeans
 from pyclustering.cluster.xmeans import xmeans, splitting_type
 from pyclustering.cluster.elbow import elbow
 from sklearn.cluster import k_means
+from shutil import rmtree
 
 import logging
 
@@ -24,12 +26,26 @@ def normalize_mat(A, eps=1e-5):
     return A
 
 
-def get_affinity_matrix(feats, tau=0.15, eps=1e-5, normalize_sim=True):
+def get_affinity_matrix(
+    feats, tau=0.15, eps=1e-5, normalize_sim=True, dim_reduce_2d=None, binarize=True
+):
     """
     create unweighted adjacency matrix, edge if mean of feature similarity above tau
     """
-    # get affinity matrix via measuring patch-wise cosine similarity
+    # dim reduce if specified
+    if dim_reduce_2d:
+        pca = PCA(n_components=dim_reduce_2d)
+        if not isinstance(feats, tuple):
+            dev = feats.device
+            feats = torch.from_numpy(pca.fit_transform(feats.cpu().numpy())).to(dev)
+        else:
+            dev = feats[1].device
+            reduced_2d = torch.from_numpy(pca.fit_transform(feats[1].cpu().numpy())).to(
+                dev
+            )
+            feats = (feats[0], reduced_2d)
 
+    # get affinity matrix via measuring patch-wise cosine similarity
     if not isinstance(feats, tuple):  # single modality feature
         feats_a = F.normalize(feats, p=2, dim=-1)
         A = feats_a @ feats_a.T
@@ -52,9 +68,10 @@ def get_affinity_matrix(feats, tau=0.15, eps=1e-5, normalize_sim=True):
         # Combine attentions
         A = (A_a + A_b) / 2
 
-    # convert the affinity matrix to a binary one.
-    A = A > tau
-    A = np.where(A.astype(float) == 0, eps, A)
+    if binarize:
+        # convert the affinity matrix to a binary one.
+        A = A > tau
+        A = np.where(A.astype(float) == 0, eps, A)
     d_i = np.sum(A, axis=0)
     D = np.diag(d_i)
     return A, D
@@ -263,6 +280,7 @@ def maskcut3d(
     eps=1e-5,
     min_segment_size=4,
     separation_mode="max",
+    dim_reduce_2d=None,
 ):
     bipartitions = []
     foreground_segments = set()
@@ -286,6 +304,7 @@ def maskcut3d(
             tau=affinity_tau,
             eps=eps,
             normalize_sim=True,
+            dim_reduce_2d=dim_reduce_2d,
         )
         A[painting.cpu().bool()] = eps
         A[:, painting.cpu().bool()] = eps
@@ -407,7 +426,9 @@ def maskcut3d(
 # =================
 
 
-def feature_spectral_embeddings(feats, unique_segments, seg_connectivity):
+def feature_spectral_embeddings(
+    feats, unique_segments, seg_connectivity, dim_reduce_2d=None
+):
     """
     arguments:
     feats: tens(n_segs, feature_dim) or tuple(tens(n_segs, feat_dim1), tens(n_segs, feat_dim2))
@@ -420,23 +441,13 @@ def feature_spectral_embeddings(feats, unique_segments, seg_connectivity):
 
     (if feats is tuple the affinity is mean of both affinity matrices)
     """
-    # adjacency/affinity matrix
-    if not isinstance(feats, tuple):  # single modality feature
-        feats_a = F.normalize(feats, p=2, dim=-1)
-        A = feats_a @ feats_a.T
-    else:  # multi-modality feature, average the attention scores from both modalities
-        # Calculate both attentions
-        feats_a, feats_b = feats
-        feats_a = F.normalize(feats_a, p=2, dim=-1)
-        feats_b = F.normalize(feats_b, p=2, dim=-1)
-        A_a, A_b = feats_a @ feats_a.T, feats_b @ feats_b.T
-        A = (A_a + A_b) / 2
+    A, D = get_affinity_matrix(feats, binarize=False, dim_reduce_2d=dim_reduce_2d)
 
     # only neighboring segments are connected
     segment_id_to_index = {}
     for s_index, s_id in enumerate(unique_segments):
         segment_id_to_index[s_id.item()] = s_index
-    mask = torch.zeros_like(A)
+    mask = np.zeros_like(A)
     for edge in seg_connectivity:
         u, v = edge[0].item(), edge[1].item()
         i_u, i_v = segment_id_to_index[u], segment_id_to_index[v]
@@ -446,12 +457,51 @@ def feature_spectral_embeddings(feats, unique_segments, seg_connectivity):
 
     # spectral embeddings (eigenvectors of laplacian)
     U = spectral_embedding(
-        A.cpu().numpy(),
+        A,
         norm_laplacian=True,  # (normed L: normalized cut, unnormed L: ratio cut)
         drop_first=False,  # first eigenvec is const for fully connected graph, we have missing edges though
     )
 
-    return U, A.cpu().numpy()
+    return U, A
+
+
+def filter_low_confidence_instances(U, dense_bipartitions):
+    """
+    confidence means low intra cluster embedding variance
+
+    arguments:
+    U: row-wise spectral embeddings of graph np(n_segments, dim_emb)
+    dense_bipartitions: np(n_instances, n_segments)
+
+    returns:
+    filtered_bipartitions: np(n_instances_filtered, n_segments)
+    """
+    # compute intra cluster embedding variances
+    n_clusters = dense_bipartitions.shape[0]
+    clusters = dense_bipartitions.argmax(axis=0)
+    variances = np.empty(shape=(n_clusters))
+    for cluster_id in range(n_clusters):
+        cluster_embeddings = U[clusters == cluster_id]
+        cluster_centroid = cluster_embeddings.mean(axis=0)
+        cluster_variance = np.mean(
+            np.sum((cluster_embeddings - cluster_centroid) ** 2, axis=-1)
+        )
+        variances[cluster_id] = cluster_variance
+
+    # threshold them at max delta to predecessor when sorted
+    # sorted_variances = np.sort(variances)
+    # var_deltas = [
+    #     sorted_variances[i] - sorted_variances[i - 1]
+    #     for i in range(1, len(sorted_variances))
+    # ]
+    # threshold_var = sorted_variances[var_deltas.index(max(var_deltas))]
+    # throw_away = variances > threshold_var
+    filter = variances > np.median(variances)
+
+    # filter high variance instances
+    filtered_bipartitions = dense_bipartitions.copy()
+    filtered_bipartitions[filter] = 0
+    return filtered_bipartitions
 
 
 def spectral_cluster_3d(
@@ -460,6 +510,9 @@ def spectral_cluster_3d(
     unique_segments,
     seg_connectivity,
     max_instances,
+    filter_instances,
+    dim_reduce_2d,
+    min_segment_size=None,
     gmeans_tolerance=None,
     xmeans_tolerance=None,
     kmeans_k=None,
@@ -477,7 +530,9 @@ def spectral_cluster_3d(
     """
     assert cluster_method in ["kmeans", "gmeans", "xmeans", "elbow"]
 
-    U, A = feature_spectral_embeddings(feats, unique_segments, seg_connectivity)
+    U, A = feature_spectral_embeddings(
+        feats, unique_segments, seg_connectivity, dim_reduce_2d
+    )
 
     # k-means
     if cluster_method == "kmeans":
@@ -543,7 +598,55 @@ def spectral_cluster_3d(
         for seg_idx, instance in enumerate(clusters):
             bipartitions[instance, seg_idx] = 1.0
 
+    # filter out too small instances
+    if min_segment_size and min_segment_size > 1:
+        n_cluster_segments = bipartitions.sum(-1)
+        filter = n_cluster_segments < min_segment_size
+        bipartitions[filter] = 0
+
+    # filter out low confidence instances
+    already_filtered = bipartitions.sum(-1) == 0
+    if filter_instances:
+        bipartitions[~already_filtered] = filter_low_confidence_instances(
+            U, bipartitions[~already_filtered]
+        )
+
     return bipartitions
+
+
+# unused
+def segment_kmeans_aggregate(point_feats, segments_ids, k):
+    """
+    aggregates features over all nonzero points of a segment
+
+    arguments:
+    point_feats: tens(n_points, feat_dim)
+    segment_ids: tens(n_points,)
+    k: int - how many cluster means to save per segment
+
+    returns (aggr_feats, unique_segments)
+    aggr_feats: tens(n_segs, k, feat_dim)
+    unique_segments: tens(n_segs,)
+    """
+    point_feats = F.normalize(point_feats, p=2, dim=-1)
+    unique_segments = segments_ids.unique()
+    n_segments = len(unique_segments)
+    feat_dim = point_feats.shape[1]
+    aggregated_feats = torch.zeros((n_segments, k, feat_dim))
+    for i, s in enumerate(unique_segments):
+        print(i)
+        seg_feats = point_feats[segments_ids == s]
+        seg_feats = seg_feats[seg_feats.sum(dim=-1).nonzero()].squeeze(dim=1)
+        if len(seg_feats) > 0:  # if no non-zero feats leave it as 0
+            if (
+                len(seg_feats) < k
+            ):  # in case there are less than k points, just repeat them to get more
+                seg_feats = seg_feats.repeat(torch.ceil(k / len(seg_feats)))
+            cluster_means, _, _ = k_means(X=seg_feats.cpu().numpy(), n_clusters=k)
+            aggregated_feats[i] = torch.from_numpy(cluster_means)
+    return aggregated_feats.to(point_feats.device), unique_segments.to(
+        segments_ids.device
+    )
 
 
 # =================
@@ -568,11 +671,27 @@ def segment_scene(
         feats_2d, segment_ids, seg_connectivity, config
     )
     aggregated_features = (aggregated_3d_features, aggregated_2d_features)
+    ncut_feats = (
+        aggregated_features if config.ncut.use_3d_feats else aggregated_2d_features
+    )
 
     # Start the iterative NCut algorithm
+    dim_reduce_2d = (
+        None if config.ncut.dim_reduce_2d == -1 else config.ncut.dim_reduce_2d
+    )
+    gmeans_tolerance = (
+        None
+        if config.ncut.spectral_gmeans_tolerance == -1
+        else config.ncut.spectral_gmeans_tolerance
+    )
+    xmeans_tolerance = (
+        None
+        if config.ncut.spectral_xmeans_tolerance == -1
+        else config.ncut.spectral_xmeans_tolerance
+    )
     if config.ncut.method == "iterative":
         bipartitions = maskcut3d(
-            aggregated_features,
+            ncut_feats,
             unique_segments,
             seg_connectivity,
             segment_ids,
@@ -583,27 +702,21 @@ def segment_scene(
             min_segment_size=config.ncut.min_segment_size,
             separation_mode=config.ncut.separation_mode,
             max_extent_ratio=config.ncut.max_extent_ratio,
+            dim_reduce_2d=dim_reduce_2d,
         )
     elif config.ncut.method == "spectral_clustering":
-        gmeans_tolerance = (
-            None
-            if config.ncut.spectral_gmeans_tolerance == -1
-            else config.ncut.spectral_gmeans_tolerance
-        )
-        xmeans_tolerance = (
-            None
-            if config.ncut.spectral_xmeans_tolerance == -1
-            else config.ncut.spectral_xmeans_tolerance
-        )
         bipartitions = spectral_cluster_3d(
             cluster_method=config.ncut.spectral_cluster_method,
-            feats=aggregated_features,
+            feats=ncut_feats,
             unique_segments=unique_segments,
             seg_connectivity=seg_connectivity,
             max_instances=config.ncut.max_number_of_instances,
+            filter_instances=config.ncut.spectral_filter_instances,
+            dim_reduce_2d=dim_reduce_2d,
             gmeans_tolerance=gmeans_tolerance,
             xmeans_tolerance=xmeans_tolerance,
             kmeans_k=config.ncut.spectral_kmeans_k,
+            min_segment_size=config.ncut.min_segment_size,
         )
     else:
         raise ValueError("ncut.method must be 'iterative' or 'spectral_clustering'")
@@ -753,6 +866,8 @@ def main(cfg):
 
         # save everything as np arrays
         scan_dir = os.path.join(cfg.ncut.save_dir, scene_name)
+        if os.path.exists(scan_dir):
+            rmtree(scan_dir)
         os.makedirs(scan_dir, exist_ok=True)
         coords_file = os.path.join(scan_dir, cfg.ncut.coords_filename)
         instances_file = os.path.join(scan_dir, cfg.ncut.instances_filename)
@@ -764,6 +879,41 @@ def main(cfg):
         log.info(f"Saved: {instances_file}")
         np.save(labels_file, labels)  # (n_instances, feature_dim_2d)
         log.info(f"Saved: {labels_file}")
+
+        # import clip
+
+        # device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # clip_model, _ = clip.load("ViT-B/32", device=device)
+        # query = ["a table in a scene"]
+        # query = clip.tokenize(query).to(device)
+        # with torch.no_grad():
+        #     query_feat = clip_model.encode_text(query).float()
+        #     query_feat = F.normalize(query_feat, p=2, dim=1)
+        # normalized_segment_feats = F.normalize(segment_feats_2d, p=2, dim=-1)
+        # normalized_point_feats = F.normalize(feats_2d, p=2, dim=-1)
+        # seg_corr_cols = normalized_segment_feats @ query_feat.T
+        # point_corr_cols = normalized_point_feats @ query_feat.T
+        # seg_corr_cols = (seg_corr_cols - seg_corr_cols.min()) / seg_corr_cols.max()
+        # seg_corr_cols = torch.hstack([seg_corr_cols, seg_corr_cols, seg_corr_cols])
+        # point_corr_cols = (
+        #     point_corr_cols - point_corr_cols.min()
+        # ) / point_corr_cols.max()
+        # point_corr_cols = torch.hstack(
+        #     [point_corr_cols, point_corr_cols, point_corr_cols]
+        # )
+        # visualize_3d_feats(
+        #     coords.cpu().numpy(),
+        #     point_corr_cols.cpu().numpy(),
+        #     os.path.join(scan_dir, "point_corr.html"),
+        # )
+        # visualize_segments(
+        #     coords.cpu().numpy(),
+        #     unique_segments.cpu().numpy(),
+        #     segment_connectivity.cpu().numpy(),
+        #     segment_ids.cpu().numpy(),
+        #     os.path.join(scan_dir, "segment_corr.html"),
+        #     custom_cols=seg_corr_cols.cpu().numpy(),
+        # )
 
         # visualize geometric oversegmentation and instances
         segment_visualization_filename = cfg.ncut.get(

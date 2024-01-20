@@ -13,7 +13,12 @@ def generate_random_color():
 
 
 def visualize_segments(
-    coords, unique_segments, seg_connectivity, segment_ids, filename
+    coords,
+    unique_segments,
+    seg_connectivity,
+    segment_ids,
+    filename,
+    custom_cols=None,
 ):
     """
     Visualize geometric oversegmentation of scene.
@@ -24,7 +29,12 @@ def visualize_segments(
     filename: where to save html
     """
     random.seed(123)
-    segment_colors = {s_id.item(): generate_random_color() for s_id in unique_segments}
+    segment_colors = {
+        s_id.item(): (
+            generate_random_color() if custom_cols is None else custom_cols[s_id.item()]
+        )
+        for s_id in unique_segments
+    }
     segment_color_map = np.array([segment_colors[s_id.item()] for s_id in segment_ids])
     seg_midpoints = []
     for s_id in unique_segments:
@@ -55,7 +65,10 @@ def visualize_segments(
     )
 
     visualize_3d_feats(
-        coords, segment_color_map, filename, additional_traces=[line_trace]
+        coords,
+        segment_color_map,
+        filename,
+        additional_traces=[line_trace],
     )
 
 

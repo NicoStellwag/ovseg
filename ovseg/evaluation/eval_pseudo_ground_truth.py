@@ -520,7 +520,7 @@ def main(cfg: DictConfig):
             gt_data_path,
             class_agnostic_pred_path,
             ds_gt,
-            "class_agnostic_val",
+            "val_class_agnostic",
         )
     except (IndexError, OSError) as e:
         print("NO SCORES!!!")

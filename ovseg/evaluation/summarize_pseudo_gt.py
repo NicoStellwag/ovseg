@@ -8,9 +8,9 @@ from pathlib import Path
 
 BASE_PATH = "/mnt/hdd/ncut_eval"
 METRICS = [
-    "class_agnostic_val_ap",
-    "class_agnostic_val_ap_25",
-    "class_agnostic_val_ap_50",
+    "val_class_agnostic_ap",
+    "val_class_agnostic_ap_25",
+    "val_class_agnostic_ap_50",
     "val_mean_ap",
     "val_mean_ap_25",
     "val_mean_ap_50",

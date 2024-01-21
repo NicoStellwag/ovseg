@@ -573,7 +573,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         if self.config.data.test_mode != "test":
             logdict = {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
-            logdict["loss"] = sum(losses.values())
+            logdict["loss"] = sum(losses.values()).detach().cpu().item()
             return logdict
         else:
             return 0.0

@@ -34,7 +34,10 @@ def get_affinity_matrix(
     """
     # dim reduce if specified
     if dim_reduce_2d:
-        pca = PCA(n_components=dim_reduce_2d)
+        n_samples = (
+            feats.shape[0] if not isinstance(feats, tuple) else feats[1].shape[0]
+        )
+        pca = PCA(n_components=min(dim_reduce_2d, n_samples))
         if not isinstance(feats, tuple):
             dev = feats.device
             feats = torch.from_numpy(pca.fit_transform(feats.cpu().numpy())).to(dev)

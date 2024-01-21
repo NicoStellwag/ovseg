@@ -1326,10 +1326,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                             ar_50,
                             ar_25,
                         ) = line.strip().split(",")
-                        ap_results[f"{log_prefix}_ap"] = float(ap)
-                        ap_results[f"{log_prefix}_ap_50"] = float(ap_50)
-                        ap_results[f"{log_prefix}_ap_25"] = float(ap_25)
-                    return ap_results
+                        ap_results[f"val_class_agnostic_ap"] = float(ap)
+                        ap_results[f"val_class_agnostic_ap_50"] = float(ap_50)
+                        ap_results[f"val_class_agnostic_ap_25"] = float(ap_25)
                 else:
                     assert False, "class agnostic eval only implemented for scannet200"
         except (IndexError, OSError) as e:
@@ -1376,6 +1375,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         dd["val_mean_loss_dice"] = statistics.mean(
             [item for item in [v for k, v in dd.items() if "loss_dice" in k]]
         )
+
+        val_loss = sum([out["loss"].cpu().item() for out in outputs]) / len(outputs)
+        dd["val_loss_mean"] = val_loss
 
         self.log_dict(dd)
 

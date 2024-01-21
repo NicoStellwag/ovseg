@@ -1,4 +1,5 @@
 # @package _group_
+# orignal mask3d one
 - _target_: pytorch_lightning.callbacks.ModelCheckpoint
   monitor: val_mean_ap_50
   save_last: true
@@ -6,6 +7,36 @@
   mode: max
   dirpath: ${general.save_dir}
   filename: "{epoch}-{val_mean_ap_50:.3f}"
+  every_n_epochs: 1
+
+# best val loss
+- _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  monitor: val_loss_mean
+  save_last: true
+  save_top_k: 1
+  mode: max
+  dirpath: ${general.save_dir}
+  filename: "{epoch}-{val_loss_mean:.3f}"
+  every_n_epochs: 1
+
+# best class agnostic ap
+- _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  monitor: val_class_agnostic_ap
+  save_last: true
+  save_top_k: 1
+  mode: max
+  dirpath: ${general.save_dir}
+  filename: "{epoch}-{val_class_agnostic_ap:.3f}"
+  every_n_epochs: 1
+
+# best ap
+- _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  monitor: val_mean_ap
+  save_last: true
+  save_top_k: 1
+  mode: max
+  dirpath: ${general.save_dir}
+  filename: "{epoch}-{val_mean_ap:.3f}"
   every_n_epochs: 1
 
 - _target_: pytorch_lightning.callbacks.LearningRateMonitor

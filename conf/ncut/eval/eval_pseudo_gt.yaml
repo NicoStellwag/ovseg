@@ -1,5 +1,5 @@
 # @package _group_
-base_dir: ??? # set equal to the save_dir of the respective ncut/run_offline.py run
+base_dir: /mnt/hdd/tmp # set equal to the save_dir of the respective ncut/run_offline.py run
 res_dir: ${ncut.eval.base_dir}/results
 gt_data:
   dataset:

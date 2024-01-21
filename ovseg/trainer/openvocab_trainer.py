@@ -572,7 +572,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         if self.config.data.test_mode != "test":
-            return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
+            logdict = {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
+            logdict["loss"] = sum(losses.values())
+            return logdict
         else:
             return 0.0
 
@@ -1376,8 +1378,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             [item for item in [v for k, v in dd.items() if "loss_dice" in k]]
         )
 
-        val_loss = sum([out["loss"].cpu().item() for out in outputs]) / len(outputs)
-        dd["val_loss_mean"] = val_loss
+        if self.config.data.test_mode != "test":
+            val_loss = sum([out["loss"].cpu().item() for out in outputs]) / len(outputs)
+            dd["val_loss_mean"] = val_loss
 
         self.log_dict(dd)
 

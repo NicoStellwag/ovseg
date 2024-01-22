@@ -37,7 +37,10 @@ def get_affinity_matrix(
         n_samples = (
             feats.shape[0] if not isinstance(feats, tuple) else feats[1].shape[0]
         )
-        pca = PCA(n_components=min(dim_reduce_2d, n_samples))
+        # there's a bug in some np versions that causes "array must not contain nans or infs"
+        # in case this is encountered set svd to full
+        # pca = PCA(n_components=min(dim_reduce_2d, n_samples))
+        pca = PCA(n_components=min(dim_reduce_2d, n_samples), svd_solver="full")
         if not isinstance(feats, tuple):
             dev = feats.device
             feats = torch.from_numpy(pca.fit_transform(feats.cpu().numpy())).to(dev)

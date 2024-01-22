@@ -190,7 +190,14 @@ def save_visualizations(
     v.save(os.path.join(save_base_dir, file_name), verbose=False)
 
 
-def get_predicted_class_ids(target_ncut, label_offset, ds_gt, ds_ncut, device, cfg):
+def get_predicted_class_ids(
+    target_ncut, label_offset, topk, ds_gt, ds_ncut, device, cfg
+):
+    """
+    returns top k classes np(n_inst, topk) for the featues
+    the topk dimension is ordered descending w.r.t. corresponding cosine sims
+    (col 0 contains the most likely class, col topk the least likely among the top k)
+    """
     ncut_instance_feats = target_ncut[0]["instance_feats"]
     ncut_instance_feats = ncut_instance_feats.to(device)
     ncut_instance_feats = F.normalize(ncut_instance_feats, p=2, dim=-1)
@@ -203,9 +210,12 @@ def get_predicted_class_ids(target_ncut, label_offset, ds_gt, ds_ncut, device, c
     )
 
     cos_sims = ncut_instance_feats @ all_text_label_feats.T
-    pred_classes = cos_sims.argmax(dim=-1)
+    _, pred_classes = cos_sims.topk(k=topk, dim=-1, sorted=True)
     pred_classes[pred_classes == 0] = -1  # chair fix
-    pred_class_ids = ds_gt._remap_model_output(pred_classes.cpu() + label_offset)
+    pred_classes = pred_classes.cpu().numpy()
+    pred_classes_flat = pred_classes.flatten()
+    pred_class_ids_flat = ds_gt._remap_model_output(pred_classes_flat + label_offset)
+    pred_class_ids = pred_class_ids_flat.reshape(pred_classes.shape)
     return pred_class_ids
 
 
@@ -427,8 +437,14 @@ def main(cfg: DictConfig):
         data_ncut, target_ncut, _ = batch_ncut
 
         pred_class_ids = get_predicted_class_ids(
-            target_ncut, label_offset, ds_gt, ds_ncut, device, cfg
-        )
+            target_ncut,
+            label_offset,
+            cfg.ncut.eval.topk_classes,
+            ds_gt,
+            ds_ncut,
+            device,
+            cfg,
+        )  # np(n_inst, topk)
 
         # remap gt labels
         gt_target_full_res = data_gt.target_full[0]
@@ -440,6 +456,7 @@ def main(cfg: DictConfig):
         # visualize
         orig_coords = data_gt.original_coordinates[0]
         pred_masks = data_ncut.target_full[0]["masks"].T.numpy()
+        most_likely_classes = pred_class_ids[:, 0]
         file_name = file_names[0]
         orig_colors = data_gt.original_colors[0]
         orig_normals = data_gt.original_normals[0]
@@ -447,7 +464,7 @@ def main(cfg: DictConfig):
             target_full=gt_target_full_res,
             full_res_coords=orig_coords,
             sorted_masks=[pred_masks],  # [np(n_points_full_res, n_pred_instances)]
-            sort_classes=[pred_class_ids],  # [np(n_pred_instances)] - class ids
+            sort_classes=[most_likely_classes],  # [np(n_pred_instances)] - class ids
             file_name=file_name,  # str (dirname => without html ending)
             original_colors=orig_colors,  # np(n_points_full, 3)
             original_normals=orig_normals,  # np(n_points_full, 3)
@@ -465,14 +482,26 @@ def main(cfg: DictConfig):
 
             # pseudo gt bounding boxes
             bbox_ncut[file_name] = get_bbox_ncut(
-                ncut_target_full_res, orig_coords, pred_class_ids
+                ncut_target_full_res, orig_coords, pred_class_ids[:, 0]
             )  # [(class_id, (bbox_center, bb_axis_len)), ...]
+
         # full res pseudo gt (real gt read from dataset by official evaluation function)
+        # submit each instance for all of the topk classes
         n_inst = ncut_target_full_res["masks"].shape[0]
+        score_delta = 0.5 / pred_class_ids.shape[1]
+        all_masks, all_scores, all_pred_classes = [], [], []
+        for i in range(pred_class_ids.shape[1]):
+            score = 1.0 - i * score_delta
+            all_masks.append(pred_masks)
+            all_scores.append(np.full(fill_value=score, shape=(n_inst)))
+            all_pred_classes.append(pred_class_ids[:, i])
+        all_masks = np.concatenate(all_masks, axis=1)
+        all_scores = np.concatenate(all_scores, axis=0)
+        all_pred_classes = np.concatenate(all_pred_classes, axis=0)
         preds[file_name] = {
-            "pred_masks": pred_masks,
-            "pred_scores": np.full(fill_value=1.0, shape=(n_inst)),
-            "pred_classes": pred_class_ids,
+            "pred_masks": all_masks,
+            "pred_scores": all_scores,
+            "pred_classes": all_pred_classes,
         }
 
     log_prefix = f"val"

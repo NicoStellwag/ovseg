@@ -707,23 +707,14 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         # logits become cos sims
         cos_sims = pred_feats @ all_label_feats.T  # tens(n_queries, n_labels)
-        prediction[self.decoder_id]["pred_logits"] = (
-            torch.hstack(  # append logits for no class that get thrown away below
-                [
-                    cos_sims,
-                    torch.empty(
-                        size=(cos_sims.shape[0], 1),
-                        device=cos_sims.device,
-                    ),
-                ]
-            )
-        ).unsqueeze(0)
+        class_probs = torch.functional.F.softmax(cos_sims, dim=-1)
+        prediction[self.decoder_id]["pred_logits"] = class_probs.unsqueeze(0)
         # ===============
 
         # compute softmax over logits
-        prediction[self.decoder_id]["pred_logits"] = torch.functional.F.softmax(
-            prediction[self.decoder_id]["pred_logits"], dim=-1
-        )[..., :-1]
+        # prediction[self.decoder_id]["pred_logits"] = torch.functional.F.softmax(
+        #     prediction[self.decoder_id]["pred_logits"], dim=-1
+        # )[..., :-1]
 
         all_pred_classes = list()
         all_pred_masks = list()
@@ -1379,7 +1370,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         if self.config.data.test_mode != "test":
-            val_loss = sum([out["loss"].cpu().item() for out in outputs]) / len(outputs)
+            val_loss = sum([out["loss"] for out in outputs]) / len(outputs)
             dd["val_loss_mean"] = val_loss
 
         self.log_dict(dd)

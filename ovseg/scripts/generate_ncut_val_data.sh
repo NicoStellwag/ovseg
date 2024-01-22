@@ -5,6 +5,12 @@
 
 export OMP_NUM_THREADS=3
 
+# ground truth
+python ncut/run_offline.py \
+ncut.data.dataset.mode="val" \
+ncut.use_ds_gt_segmentation=true \
+ncut.save_dir="/mnt/hdd/ncut_eval/lseg_gt"
+
 # spectral clustering, no dim reduction, 3d feats, no filtering
 nice -n 15 python ncut/run_offline.py \
 ncut.data.dataset.mode="val" \
@@ -68,6 +74,7 @@ ncut.spectral_filter_instances="true"
 # iterative ncut
 for tau in $(LANG=en_US seq 0.5 0.05 0.9)
 do
+
     # iterative, no dim reduction, 3d feats
     nice -n 15 python ncut/run_offline.py \
     ncut.data.dataset.mode="val" \
@@ -99,4 +106,5 @@ do
     ncut.affinity_tau="${tau}" \
     ncut.dim_reduce_2d=128 \
     ncut.use_3d_feats="false"
+
 done

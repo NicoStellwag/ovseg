@@ -39,7 +39,7 @@ general:
 
   eval_inner_core: -1 # disabled
 
-  topk_per_image: 100
+  topk_per_image: -1
 
   ignore_mask_idx: []
 

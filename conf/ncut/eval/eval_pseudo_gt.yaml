@@ -1,4 +1,5 @@
 # @package _group_
+topk_classes: 1 # instances are submitted for each of the topk most likely classes (1 means normal eval)
 base_dir: /mnt/hdd/tmp # set equal to the save_dir of the respective ncut/run_offline.py run
 res_dir: ${ncut.eval.base_dir}/results
 gt_data:

@@ -102,7 +102,7 @@ do
     nice -n 15 python ncut/run_offline.py \
     ncut.data.dataset.mode="val" \
     ncut.method="iterative" \
-    ncut.save_dir="/mnt/hdd/ncut_eval/lseg_iterative_${tau}_reducedim_2d" \
+    ncut.save_dir="/mnt/hdd/ncut_eval/lseg_iterative_${tau}_reduceddim_2d" \
     ncut.affinity_tau="${tau}" \
     ncut.dim_reduce_2d=128 \
     ncut.use_3d_feats="false"

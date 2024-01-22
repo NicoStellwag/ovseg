@@ -3,7 +3,7 @@
 export OMP_NUM_THREADS=3
 
 EVAL_DIR="/mnt/hdd/ncut_eval"
-SUBDIR_PATTERN="*gt" # "*" for all subdirs
+SUBDIR_PATTERN="*reduceddim*" # "*" for all subdirs
 
 for subdir in "$EVAL_DIR"/$SUBDIR_PATTERN; do
     if [ -d "$subdir" ]; then

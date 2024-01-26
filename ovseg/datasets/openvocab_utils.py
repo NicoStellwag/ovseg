@@ -19,6 +19,8 @@ class OpenVocabVoxelizeCollate:
         filter_out_classes=[],
         label_offset=0,
         num_queries=None,
+        export=False,
+        iou_threshold=0.1
     ):
         assert task in [
             "instance_segmentation",
@@ -35,6 +37,8 @@ class OpenVocabVoxelizeCollate:
         self.very_small_crops = very_small_crops
         self.probing = probing
         self.ignore_class_threshold = ignore_class_threshold
+        self.export = export
+        self.iou_threshold = iou_threshold
 
         self.num_queries = num_queries
 
@@ -54,6 +58,8 @@ class OpenVocabVoxelizeCollate:
             filter_out_classes=self.filter_out_classes,
             label_offset=self.label_offset,
             num_queries=self.num_queries,
+            export=self.export,
+            iou_threshold=self.iou_threshold
         )
 
 
@@ -231,6 +237,8 @@ def voxelize(
     filter_out_classes,
     label_offset,
     num_queries,
+    export,
+    iou_threshold
 ):
     (
         coordinates,
@@ -243,7 +251,8 @@ def voxelize(
         original_normals,
         original_coordinates,
         idx,
-    ) = ([], [], [], [], [], [], [], [], [], [])
+        new_instances,
+    ) = ([], [], [], [], [], [], [], [], [], [], [])
     voxelization_dict = {
         "ignore_label": ignore_label,
         # "quantization_size": self.voxel_size,
@@ -261,6 +270,7 @@ def voxelize(
         full_res_coords.append(sample[0])
         original_colors.append(sample[5])
         original_normals.append(sample[6])
+        new_instances.append(sample[9])
 
         # instance ids are left unchanged throughout voxelize collate,
         # so we can just pass the instance's clip vecs through the target
@@ -384,10 +394,12 @@ def voxelize(
                     ignore_class_threshold=ignore_class_threshold,
                     filter_out_classes=filter_out_classes,
                     label_offset=label_offset,
+                    new_instances=new_instances,
+                    iou_threshold=iou_threshold
                 )
                 for i in range(len(target)):
                     target[i]["point2segment"] = input_dict["labels"][i][:, 2]
-                if "train" not in mode:
+                if "train" not in mode or export:
                     target_full = get_instance_masks(
                         [torch.from_numpy(l) for l in original_labels],
                         instance_feature_vecs,
@@ -395,6 +407,8 @@ def voxelize(
                         ignore_class_threshold=ignore_class_threshold,
                         filter_out_classes=filter_out_classes,
                         label_offset=label_offset,
+                        new_instances=new_instances,
+                        iou_threshold=iou_threshold
                     )
                     for i in range(len(target_full)):
                         target_full[i]["point2segment"] = torch.from_numpy(
@@ -406,7 +420,7 @@ def voxelize(
         coordinates = []
         features = []
 
-    if "train" not in mode:
+    if "train" not in mode or export:
         return (
             NoGpu(
                 coordinates,
@@ -419,6 +433,7 @@ def voxelize(
                 original_normals,
                 original_coordinates,
                 idx,
+                new_instances
             ),
             target,
             [sample[4] for sample in batch],
@@ -431,10 +446,17 @@ def voxelize(
                 original_labels,
                 inverse_maps,
                 full_res_coords,
+                new_instances
             ),
             target,
             [sample[4] for sample in batch],
         )
+
+def calculate_iou(mask1, mask2):
+    intersection = torch.logical_and(mask1, mask2)
+    union = torch.logical_or(mask1, mask2)
+    iou = torch.sum(intersection) / torch.sum(union)
+    return iou
 
 
 def get_instance_masks(
@@ -445,6 +467,8 @@ def get_instance_masks(
     ignore_class_threshold=100,
     filter_out_classes=[],
     label_offset=0,
+    new_instances=[],
+    iou_threshold=0.1
 ):
     """
     split a list of labels [(n_points, 3), ...]
@@ -463,7 +487,8 @@ def get_instance_masks(
         masks = []
         filtered_instance_feature_vecs = []
         segment_masks = []
-        instance_ids = list_labels[batch_id][:, 1].unique()
+        instance_ids = list_labels[batch_id][:, 1]
+        instance_ids = instance_ids.type(torch.torch.IntTensor).unique()
 
         for instance_id in instance_ids:
             # -1 is non-instance id
@@ -502,17 +527,44 @@ def get_instance_masks(
                         :, 2
                     ].unique()
                 ] = True
-                segment_masks.append(segment_mask)
+                segment_masks.append(segment_mask)                 
+
+
 
         if len(label_ids) == 0:
             return list()
+            
+
+        if list_segments:
+            if(len(new_instances[batch_id]) != 0):
+                #dirty but does the job
+                iou = -1
+                new_masks, new_features = new_instances[batch_id]
+                for i, mask in enumerate(new_masks):
+                    for segment_mask in segment_masks:
+                        iou = calculate_iou(mask, segment_mask)
+                        print(iou)
+                        if(iou >= iou_threshold):
+                            segment_masks.append(mask)
+                            filtered_instance_feature_vecs.append(new_features[i])
+                            break
+                    if(iou >= iou_threshold):
+                        break
+
+                #better
+                # pairwise_overlap = segment_masks @ new_instances[batch_id].T
+                # normalization = pairwise_overlap.max(axis=0) + 1e-6
+                # norm_overlaps = pairwise_overlap / normalization
+                # thresholded = norm_overlaps > iou_threshold
+
+
+            segment_masks = torch.stack(segment_masks)
 
         # stack
         filtered_instance_feature_vecs = torch.stack(filtered_instance_feature_vecs)
         label_ids = torch.stack(label_ids)
         masks = torch.stack(masks)
-        if list_segments:
-            segment_masks = torch.stack(segment_masks)
+
 
         # if mode is semantic segmentation aggregate all masks of the same semantic class
         # if mode is instance segmentation keep them separate
@@ -648,6 +700,7 @@ class NoGpu:
         original_normals=None,
         original_coordinates=None,
         idx=None,
+        new_instances=None
     ):
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
@@ -660,6 +713,7 @@ class NoGpu:
         self.original_normals = original_normals
         self.original_coordinates = original_coordinates
         self.idx = idx
+        self.new_instances=new_instances
 
 
 class NoGpuMask:
@@ -671,6 +725,7 @@ class NoGpuMask:
         inverse_maps=None,
         masks=None,
         labels=None,
+        new_instances=None
     ):
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
@@ -680,3 +735,4 @@ class NoGpuMask:
 
         self.masks = masks
         self.labels = labels
+        self.new_instances=new_instances

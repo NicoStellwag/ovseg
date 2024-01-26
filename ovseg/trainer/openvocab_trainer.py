@@ -158,6 +158,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
     # * only log name of loss changed
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
+        if self.config.general.export:
+            self.eval_step(batch,batch_idx)
+            return None
         target = self.dim_reduce_target(target)
 
         if data.features.shape[0] > self.config.general.max_batch_size:
@@ -180,6 +183,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         try:
+            
             output = self.forward(
                 data,
                 point2segment=[target[i]["point2segment"] for i in range(len(target))],
@@ -236,16 +240,18 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
     def export(
         self,
         pred_masks,
+        pred_masks_instance,
         scores,
         pred_classes,
         pred_features,
         file_names,
         decoder_id,
+        cycle_id,
         root_path=None,
     ):
         if not root_path:
-            root_path = f"eval_output"
-        base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}/decoder_{decoder_id}"
+            root_path = f"eval_output_"
+        base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}/decoder_{decoder_id}_{cycle_id}"
         pred_mask_path = f"{base_path}/pred_mask"
 
         Path(pred_mask_path).mkdir(parents=True, exist_ok=True)
@@ -258,20 +264,22 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 pred_class = pred_classes[instance_id]
                 score = scores[instance_id]
                 feature = pred_features[instance_id]
-                mask = pred_masks[:, instance_id].astype("uint8")
+                mask = pred_masks_instance[:, instance_id].astype("uint8")
+
 
                 if score > self.config.general.export_threshold:
                     # reduce the export size a bit. I guess no performance difference
-                    np.savetxt(
-                        f"{pred_mask_path}/{file_name}_{real_id}.txt",
-                        mask,
-                        fmt="%d",
-                    )
+                    # np.savetxt(
+                    #     f"{pred_mask_path}/{file_name}_{real_id}.txt",
+                    #     mask,
+                    #     fmt="%d",
+                    # )
+                    np.save(f"{pred_mask_path}/{file_name}_{real_id}_mask.npy",mask)
                     np.save(
                         f"{pred_mask_path}/{file_name}_{real_id}_feature.npy", feature
                     )
                     fout.write(
-                        f"pred_mask/{file_name}_{real_id}.txt {pred_class} {score}\n"
+                        f"pred_mask/{file_name}_{real_id}.npy {score}\n"
                     )
 
     # * nothing changed
@@ -491,25 +499,26 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         raw_coordinates = None
         if self.config.data.add_raw_coordinates:
-            raw_coordinates = data.features[:, -3:]
+            raw_coordinates = data.features[:, -3:]#npoint,3
             data.features = data.features[:, :-3]
 
         if raw_coordinates.shape[0] == 0:
             return 0.0
 
         data = ME.SparseTensor(
-            coordinates=data.coordinates,
-            features=data.features,
+            coordinates=data.coordinates,#npoint,4
+            features=data.features,#npoint,3
             device=self.device,
         )
 
         try:
-            output = self.forward(
-                data,
-                point2segment=[target[i]["point2segment"] for i in range(len(target))],
-                raw_coordinates=raw_coordinates,
-                is_eval=True,
-            )
+            with torch.no_grad():
+                output = self.forward(
+                    data,
+                    point2segment=[target[i]["point2segment"] for i in range(len(target))],#npoints
+                    raw_coordinates=raw_coordinates,
+                    is_eval=True,
+                )
         except RuntimeError as run_err:
             print(run_err)
             if "only a single point gives nans in cross-attention" == run_err.args[0]:
@@ -718,6 +727,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         all_pred_classes = list()
         all_pred_masks = list()
+        all_pred_masks_instances = list()
         all_pred_scores = list()
         all_pred_features = list()
         all_heatmaps = list()
@@ -857,6 +867,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 )
 
             masks = masks.numpy()
+            masks_instance = prediction[self.decoder_id]["pred_masks"][bid].detach().cpu().numpy()
             heatmap = heatmap.numpy()
 
             sort_scores = scores.sort(descending=True)
@@ -866,6 +877,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             sort_features = features[sort_scores_index]
 
             sorted_masks = masks[:, sort_scores_index]
+            sorted_masks_instance = masks_instance[:, sort_scores_index]
             sorted_heatmap = heatmap[:, sort_scores_index]
 
             # throw away predicted instances with low scores if specified
@@ -900,12 +912,14 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 keep_instances = sorted(list(keep_instances))
                 all_pred_classes.append(sort_classes[keep_instances])
                 all_pred_masks.append(sorted_masks[:, keep_instances])
+                all_pred_masks_instances.append(sorted_masks_instance[:, keep_instances])
                 all_pred_scores.append(sort_scores_values[keep_instances])
                 all_pred_features.append(sort_features[keep_instances])
                 all_heatmaps.append(sorted_heatmap[:, keep_instances])
             else:
                 all_pred_classes.append(sort_classes)
                 all_pred_masks.append(sorted_masks)
+                all_pred_masks_instances.append(sorted_masks_instance)
                 all_pred_scores.append(sort_scores_values)
                 all_pred_features.append(sort_features)
                 all_heatmaps.append(sorted_heatmap)
@@ -989,6 +1003,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             if self.config.general.eval_inner_core == -1:
                 self.preds[file_names[bid]] = {
                     "pred_masks": all_pred_masks[bid],
+                    "pred_masks_instance": all_pred_masks_instances[bid],
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
                     "pred_features": all_pred_features[bid],
@@ -1067,21 +1082,25 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
                     self.export(
                         self.preds[file_names[bid]]["pred_masks"],
+                        self.preds[file_names[bid]]["pred_masks_instance"],
                         self.preds[file_names[bid]]["pred_scores"],
                         self.preds[file_names[bid]]["pred_classes"],
                         self.preds[file_names[bid]]["pred_features"],
                         file_name,
                         self.decoder_id,
+                        self.config.general.cycle_id,
                         root_path=self.config.general.export_root_path,
                     )
                 else:
                     self.export(
                         self.preds[file_names[bid]]["pred_masks"],
+                        self.preds[file_names[bid]]["pred_masks_instance"],
                         self.preds[file_names[bid]]["pred_scores"],
                         self.preds[file_names[bid]]["pred_classes"],
                         self.preds[file_names[bid]]["pred_features"],
                         file_names[bid],
                         self.decoder_id,
+                        self.config.general.cycle_id,
                         root_path=self.config.general.export_root_path,
                     )
 

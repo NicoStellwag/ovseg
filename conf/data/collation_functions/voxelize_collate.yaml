@@ -14,6 +14,8 @@ train_collation:
   filter_out_classes: ${data.train_dataset.filter_out_classes}
   label_offset: ${data.train_dataset.label_offset}
   num_queries: ${model.num_queries}
+  export: ${general.export}
+  iou_threshold: ${general.iou_threshold}
 
 validation_collation:
   _target_: ovseg.datasets.openvocab_utils.OpenVocabVoxelizeCollate

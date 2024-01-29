@@ -96,6 +96,8 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         is_elastic_distortion=True,
         color_drop=0.0,
         natlang_category=True,
+        previous_cycle_ground_truth_dir=None,
+        cycle_id=0,
     ):
         assert task in [
             "instance_segmentation",
@@ -210,6 +212,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         self.flip_in_center = flip_in_center
         self.noise_rate = noise_rate
         self.resample_points = resample_points
+        self.cycle_id = cycle_id
 
         # loading database files
         self._data = []
@@ -235,6 +238,46 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         if data_percent < 1.0:
             self._data = sample(self._data, int(len(self._data) * data_percent))
         labels = self._load_yaml(Path(label_db_filepath))
+
+        self.new_instances = {}
+        if(self.cycle_id != 0 and "train" in self.mode):
+            new_masks = {}
+            new_features = {}
+            previous_cycle_ground_truth_dir = previous_cycle_ground_truth_dir + str(cycle_id-1) + "/"
+            train_file_names = []
+            for file_name in self._data:
+                if("train" in file_name["instance_gt_filepath"]):
+                    train_file_names.append(file_name["instance_gt_filepath"].split("/")[-1])
+            #train_file_names=["scene0250_02.txt","scene0015_00.txt","scene0421_00.txt","scene0168_00.txt","scene0057_01.txt","scene0059_01.txt"] #for testing
+
+            scores = {}
+            for train_file_name in train_file_names:
+                with open(previous_cycle_ground_truth_dir + train_file_name, 'r') as file:
+                    for line in file:
+                        parts = line.split()
+                        if len(parts) == 2:
+                            file_name, value = parts
+                            scores[file_name] = float(value)
+
+            scores_sorted = dict(sorted(scores.items(), key=lambda item: item[1],reverse=True))
+            scores_filtered = {key: scores_sorted[key] for key in list(scores_sorted.keys())[:100]}
+
+            scores_filtered_sorted = dict(sorted(scores_filtered.items(), key=lambda item: item[0],reverse=True))
+
+            
+            for file_name in scores_filtered_sorted.keys():
+                scene_name = "_".join(file_name.split("/")[-1].split("_")[:-1])
+                mask_file_name_ = file_name.split(".")
+                mask_file_name = "".join([mask_file_name_[0],"_mask.",mask_file_name_[1]])
+                feature_file_name = "".join([mask_file_name_[0],"_feature.",mask_file_name_[1]])
+                if(scene_name not in new_masks):
+                    new_masks[scene_name] = [np.load(previous_cycle_ground_truth_dir + mask_file_name)]
+                    new_features[scene_name] = [np.load(previous_cycle_ground_truth_dir + feature_file_name)]
+                else:
+                    new_masks[scene_name].append(np.load(previous_cycle_ground_truth_dir + mask_file_name))
+                    new_features[scene_name].append(np.load(previous_cycle_ground_truth_dir + feature_file_name))
+
+            self.new_instances = {scene_name: (torch.tensor(np.stack(new_masks[scene_name])),torch.tensor(np.stack(new_features[scene_name]))) for scene_name in new_masks.keys()}
 
         # fix: label map has a bug:
         #      "floor" and "chair" text labels are swapped
@@ -554,6 +597,10 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         if "train" in self.mode:
             labels[:, 0] = np.NaN
         # ===========================
+        new_instances = []
+        #print(len(self.data))
+        if(scene_name in self.new_instances):
+            new_instances = self.new_instances[scene_name]
 
         # volume and image augmentations for train
         if "train" in self.mode or self.is_tta:
@@ -822,6 +869,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                 raw_normals,
                 raw_coordinates,
                 idx,
+                new_instances
             )
 
     @property

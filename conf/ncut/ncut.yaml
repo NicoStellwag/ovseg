@@ -1,5 +1,5 @@
 # @package _group_
-save_dir: '/mnt/hdd/ncut_eval_v2'
+save_dir: '/mnt/hdd/self_training_initial'
 coords_filename: coords.npy
 instances_filename: pointwise_instances.npy
 labels_filename: instance_labels.npy
@@ -11,10 +11,10 @@ eval: ???
 use_ds_gt_segmentation: false # if true, aggregate features over ds ground truth instances
 use_3d_feats: true
 dim_reduce_2d: -1 # -1 for keep full dim
-method: spectral_clustering # iterative / spectral_clustering
+method: iterative # iterative / spectral_clustering
 
 # spectral clustering
-spectral_cluster_method: elbow # kmeans/ gmeans / xmeans / elbow
+spectral_cluster_method: elbow # kmeans / gmeans / xmeans / elbow
 spectral_filter_instances: false
 spectral_kmeans_k: 20
 spectral_gmeans_tolerance: -1 # , -1 takes default, we likely want higher

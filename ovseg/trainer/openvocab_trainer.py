@@ -90,9 +90,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             "loss_dice": matcher.cost_dice,
         }
         # feature dim reduction
-        # self.feature_dim_reduction = SavablePCA.from_file(
-        #     config.data.feature_dim_reduction_path
-        # )
+        if config.data.feature_dim_reduction_path:
+            self.feature_dim_reduction = SavablePCA.from_file(
+                config.data.feature_dim_reduction_path
+            )
 
         aux_weight_dict = {}
         for i in range(self.model.num_levels * self.model.num_decoders):

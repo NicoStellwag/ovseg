@@ -4,7 +4,7 @@
 # but they might be overwritten
 
 # other dirs
-feature_dim_reduction_path: /mnt/hdd/self_training_initial/pca.pkl
+feature_dim_reduction_path: null
 
 # splits
 train_mode: train_validation

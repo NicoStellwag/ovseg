@@ -90,9 +90,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             "loss_dice": matcher.cost_dice,
         }
         # feature dim reduction
-        self.feature_dim_reduction = SavablePCA.from_file(
-            config.data.feature_dim_reduction_path
-        )
+        # self.feature_dim_reduction = SavablePCA.from_file(
+        #     config.data.feature_dim_reduction_path
+        # )
 
         aux_weight_dict = {}
         for i in range(self.model.num_levels * self.model.num_decoders):
@@ -160,6 +160,15 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         data, target, file_names = batch
         if self.config.general.export:
             self.eval_step(batch,batch_idx)
+            del self.preds
+            del self.bbox_preds
+            del self.bbox_gt
+
+            gc.collect()
+
+            self.preds = dict()
+            self.bbox_preds = dict()
+            self.bbox_gt = dict()
             return None
         target = self.dim_reduce_target(target)
 
@@ -245,17 +254,15 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         pred_classes,
         pred_features,
         file_names,
-        decoder_id,
-        cycle_id,
         root_path=None,
     ):
         if not root_path:
             root_path = f"eval_output_"
-        base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}/decoder_{decoder_id}_{cycle_id}"
+        base_path = f"{self.config.general.export_root_path}/instance_evaluation_{self.config.general.experiment_name}"
         pred_mask_path = f"{base_path}/pred_mask"
 
         Path(pred_mask_path).mkdir(parents=True, exist_ok=True)
-
+        
         file_name = file_names
         with open(f"{base_path}/{file_name}.txt", "w") as fout:
             real_id = -1
@@ -1014,6 +1021,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     "pred_masks": all_pred_masks[bid][
                         self.test_dataset.data[idx[bid]]["cond_inner"]
                     ],
+                    "pred_masks_instance": all_pred_masks_instances[bid],
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
                     "pred_features": all_pred_features[bid],
@@ -1087,9 +1095,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         self.preds[file_names[bid]]["pred_classes"],
                         self.preds[file_names[bid]]["pred_features"],
                         file_name,
-                        self.decoder_id,
-                        self.config.general.cycle_id,
-                        root_path=self.config.general.export_root_path,
                     )
                 else:
                     self.export(
@@ -1099,9 +1104,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         self.preds[file_names[bid]]["pred_classes"],
                         self.preds[file_names[bid]]["pred_features"],
                         file_names[bid],
-                        self.decoder_id,
-                        self.config.general.cycle_id,
-                        root_path=self.config.general.export_root_path,
                     )
 
     # * nothing changed

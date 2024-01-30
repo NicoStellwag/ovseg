@@ -9,7 +9,7 @@ from copy import deepcopy
 from random import randrange
 from math import isnan
 
-
+from tqdm import tqdm
 import numpy
 import torch
 import clip
@@ -96,8 +96,8 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         is_elastic_distortion=True,
         color_drop=0.0,
         natlang_category=True,
-        previous_cycle_ground_truth_dir=None,
-        cycle_id=0,
+        use_previous_cycle=False,
+        previous_cycle_path=None,
     ):
         assert task in [
             "instance_segmentation",
@@ -212,7 +212,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         self.flip_in_center = flip_in_center
         self.noise_rate = noise_rate
         self.resample_points = resample_points
-        self.cycle_id = cycle_id
+        self.use_previous_cycle = use_previous_cycle
 
         # loading database files
         self._data = []
@@ -240,10 +240,10 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
         labels = self._load_yaml(Path(label_db_filepath))
 
         self.new_instances = {}
-        if(self.cycle_id != 0 and "train" in self.mode):
+        if(self.use_previous_cycle == True and "train" in self.mode):
             new_masks = {}
             new_features = {}
-            previous_cycle_ground_truth_dir = previous_cycle_ground_truth_dir + str(cycle_id-1) + "/"
+            previous_cycle_ground_truth_dir = previous_cycle_path + "/"
             train_file_names = []
             for file_name in self._data:
                 if("train" in file_name["instance_gt_filepath"]):
@@ -252,6 +252,8 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
 
             scores = {}
             for train_file_name in train_file_names:
+                if("scene0636_00" in train_file_name or "scene0154_00" in train_file_name):
+                    continue
                 with open(previous_cycle_ground_truth_dir + train_file_name, 'r') as file:
                     for line in file:
                         parts = line.split()
@@ -259,13 +261,13 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                             file_name, value = parts
                             scores[file_name] = float(value)
 
-            scores_sorted = dict(sorted(scores.items(), key=lambda item: item[1],reverse=True))
-            scores_filtered = {key: scores_sorted[key] for key in list(scores_sorted.keys())[:100]}
+            # scores_sorted = dict(sorted(scores.items(), key=lambda item: item[1],reverse=True))
+            # scores_filtered = {key: scores_sorted[key] for key in list(scores_sorted.keys())}
 
-            scores_filtered_sorted = dict(sorted(scores_filtered.items(), key=lambda item: item[0],reverse=True))
+            # scores_filtered_sorted = dict(sorted(scores_filtered.items(), key=lambda item: item[0],reverse=True))
 
             
-            for file_name in scores_filtered_sorted.keys():
+            for file_name in tqdm(scores.keys()):
                 scene_name = "_".join(file_name.split("/")[-1].split("_")[:-1])
                 mask_file_name_ = file_name.split(".")
                 mask_file_name = "".join([mask_file_name_[0],"_mask.",mask_file_name_[1]])
@@ -598,8 +600,7 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
             labels[:, 0] = np.NaN
         # ===========================
         new_instances = []
-        #print(len(self.data))
-        if(scene_name in self.new_instances):
+        if(self.use_previous_cycle == True and scene_name in self.new_instances):
             new_instances = self.new_instances[scene_name]
 
         # volume and image augmentations for train
@@ -788,7 +789,9 @@ class OpenVocabSemanticSegmentationDataset(Dataset):
                             np.full_like(unlabeled_labels, self.ignore_label),
                         )
                     )
-
+            #print(pointwise_instances.shape,labels[:,1].shape)
+            if(False in np.equal(pointwise_instances,labels[:,1])):
+                print("??")
             # augmentation: remove color information from scene
             if random() < self.color_drop:
                 color[:] = 255

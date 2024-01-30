@@ -12,10 +12,10 @@ general:
   save_visualizations: false
   visualization_point_size: 20
   decoder_id: -1
-  cycle_id: 0 #0 for first cycle
   export: false
-  export_root_path: /mnt/hdd/eval_output
-  previous_experiment_name: ??? #give name of the experiment to load the previous cycle from
+  export_root_path: /mnt/hdd/eval_output_
+  use_previous_cycle: True
+  previous_cycle_path: /mnt/hdd/eval_output_/instance_evaluation_47-51-01_30-01-24/
   use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100
   project_name: ovseg
@@ -41,7 +41,7 @@ general:
 
   eval_inner_core: -1 # disabled
 
-  topk_per_image: 100
+  topk_per_image: -1
 
   ignore_mask_idx: []
 

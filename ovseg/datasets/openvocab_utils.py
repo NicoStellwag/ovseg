@@ -20,7 +20,7 @@ class OpenVocabVoxelizeCollate:
         label_offset=0,
         num_queries=None,
         export=False,
-        iou_threshold=0.1
+        iou_threshold=0.5
     ):
         assert task in [
             "instance_segmentation",
@@ -433,7 +433,7 @@ def voxelize(
                 original_normals,
                 original_coordinates,
                 idx,
-                new_instances
+                #new_instances
             ),
             target,
             [sample[4] for sample in batch],
@@ -446,7 +446,7 @@ def voxelize(
                 original_labels,
                 inverse_maps,
                 full_res_coords,
-                new_instances
+                #new_instances
             ),
             target,
             [sample[4] for sample in batch],
@@ -487,7 +487,7 @@ def get_instance_masks(
         masks = []
         filtered_instance_feature_vecs = []
         segment_masks = []
-        instance_ids = list_labels[batch_id][:, 1]
+        instance_ids = list_labels[batch_id][:, 1]#.unique()
         instance_ids = instance_ids.type(torch.torch.IntTensor).unique()
 
         for instance_id in instance_ids:
@@ -539,17 +539,22 @@ def get_instance_masks(
             if(len(new_instances[batch_id]) != 0):
                 #dirty but does the job
                 iou = -1
+                mismatched = 0
                 new_masks, new_features = new_instances[batch_id]
                 for i, mask in enumerate(new_masks):
                     for segment_mask in segment_masks:
+                        if(mask.shape != segment_mask.shape):
+                            mismatched+=1
+                            continue
                         iou = calculate_iou(mask, segment_mask)
-                        print(iou)
                         if(iou >= iou_threshold):
-                            segment_masks.append(mask)
+                            segment_masks.append(segment_mask)
                             filtered_instance_feature_vecs.append(new_features[i])
                             break
                     if(iou >= iou_threshold):
                         break
+                # if(mismatched != 0):
+                #     print(mismatched)
 
                 #better
                 # pairwise_overlap = segment_masks @ new_instances[batch_id].T
@@ -700,7 +705,7 @@ class NoGpu:
         original_normals=None,
         original_coordinates=None,
         idx=None,
-        new_instances=None
+        #new_instances=None
     ):
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
@@ -713,7 +718,7 @@ class NoGpu:
         self.original_normals = original_normals
         self.original_coordinates = original_coordinates
         self.idx = idx
-        self.new_instances=new_instances
+        #self.new_instances=new_instances
 
 
 class NoGpuMask:
@@ -725,7 +730,7 @@ class NoGpuMask:
         inverse_maps=None,
         masks=None,
         labels=None,
-        new_instances=None
+        #new_instances=None
     ):
         """helper class to prevent gpu loading on lightning"""
         self.coordinates = coordinates
@@ -735,4 +740,4 @@ class NoGpuMask:
 
         self.masks = masks
         self.labels = labels
-        self.new_instances=new_instances
+        #self.new_instances=new_instances

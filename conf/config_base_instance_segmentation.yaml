@@ -15,7 +15,7 @@ general:
   export: false
   export_root_path: /mnt/hdd/eval_output_
   use_previous_cycle: False
-  previous_cycle_path: ${general.export_root_path}/instance_evaluation_${general.previous_experiment_name}/decoder_${general.decoder_id}_
+  previous_cycle_path: "[path to export dir]"
   use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100
   project_name: ovseg

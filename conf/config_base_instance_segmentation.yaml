@@ -14,7 +14,7 @@ general:
   decoder_id: -1
   export: false
   export_root_path: /mnt/hdd/eval_output_
-  use_previous_cycle: True
+  use_previous_cycle: False
   previous_cycle_path: /mnt/hdd/eval_output_/instance_evaluation_47-51-01_30-01-24/
   use_dbscan: false # we want to use db scan for testing
   ignore_class_threshold: 100
@@ -65,7 +65,7 @@ defaults:
   - metrics: miou
   - optimizer: adamw
   - scheduler: onecyclelr
-  - trainer: trainer
+  - trainer: trainer600
   - callbacks: callbacks_instance_segmentation
   - matcher: hungarian_matcher
   - loss: set_criterion

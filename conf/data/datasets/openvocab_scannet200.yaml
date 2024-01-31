@@ -36,8 +36,8 @@ train_dataset:
   crop_length: ${data.crop_length}
   filter_out_classes: []
   label_offset: 0
-  cycle_id: ${general.cycle_id}
-  previous_cycle_ground_truth_dir: ${general.export_root_path}/instance_evaluation_${general.previous_experiment_name}/decoder_${general.decoder_id}_
+  use_previous_cycle: ${general.use_previous_cycle}
+  previous_cycle_path: ${general.previous_cycle_path}
 
 validation_dataset:
   _target_: ovseg.datasets.openvocab_semseg.OpenVocabSemanticSegmentationDataset

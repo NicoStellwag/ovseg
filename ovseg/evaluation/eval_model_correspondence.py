@@ -1,4 +1,5 @@
 import hydra
+from sklearn.decomposition import PCA
 import os
 import sys
 from pathlib import Path
@@ -6,13 +7,35 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import clip
+from tqdm import tqdm
 
-EXPORT_DIR = (
-    "/home/stellwag/dev/ovseg/eval_output/instance_evaluation_test_2_49/decoder_-1"
+MODEL_EXPORT_DIR = (
+    "/mnt/hdd/viz_poster/model_exports/instance_evaluation_i4_test_export"
 )
-QUERIES = ["a chair in a scene", "a table in a scene"]
+QUERIES = [
+    "a fridge in a scene",
+    "a couch in a scene",
+    "a chair in a scene",
+    "a shelf in a scene",
+    "a kitchen counter in a scene",
+    "a washing machine in a scene",
+    "a trashcan in a scene",
+    "a desk in a scene",
+    "a computer in a scene",
+    "a window in a scene",
+    "a door in a scene",
+    "a computer in a scene",
+    "a toilet in a scene",
+    "a sink in a scene",
+    "stairs in a scene",
+    "washing machines in a scene",
+    "a painting on the wall",
+]
 TOP_K = 3
-SAVE_DIR = "/mnt/hdd/corr_viz/"
+SAVE_DIR = "/mnt/hdd/viz_poster/model_i4"
+FIRST_N_SCENES = 10
+FEATURE_CLOUDS_DIR_2D = "/mnt/hdd/ncut_features/2d/lseg"
+FEATURE_CLOUDS_DIR_3D = "/mnt/hdd/ncut_features/3d/csc"
 
 
 @hydra.main(
@@ -36,12 +59,19 @@ def main(cfg):
     query_feats = F.normalize(query_feats, p=2, dim=-1)
     query_feats = query_feats.cpu().numpy()  # np(n_queries, dim_feature)
 
-    ds = hydra.utils.instantiate(cfg.data.validation_dataset)
-    collate_fn = hydra.utils.instantiate(cfg.data.validation_collation)
+    ds = hydra.utils.instantiate(cfg.data.test_dataset)
+    collate_fn = hydra.utils.instantiate(cfg.data.test_collation)
     loader = hydra.utils.instantiate(
-        cfg.data.validation_dataloader, ds, collate_fn=collate_fn
+        cfg.data.test_dataloader, ds, collate_fn=collate_fn
     )
-    for batch in loader:
+    if FIRST_N_SCENES:
+        total = min(len(loader), FIRST_N_SCENES)
+    else:
+        total = len(loader)
+    for i, batch in tqdm(enumerate(loader), total=total):
+        if i == FIRST_N_SCENES:
+            break
+
         data, target, file_names = batch
 
         file_name = file_names[0]
@@ -50,46 +80,45 @@ def main(cfg):
         orig_colors = data.original_colors[0]
         orig_normals = data.original_normals[0]
 
-        export_dir = Path(EXPORT_DIR)
+        export_dir = Path(MODEL_EXPORT_DIR)
         export_file = export_dir / (str(file_name) + ".txt")
 
+        # load model predictions and compute query correspondences
         if not export_file.exists:
             print(f"WARNING: no exports for {file_name}")
             continue
-
         predictions = []  # order: scores descending
         with open(export_file, "r") as fl:
             lines = fl.readlines()
         for line in lines:
-            rel_mask_file, pred_class_id, score = line.strip().split(" ")
-            mask_file = export_dir / rel_mask_file
-            feature_file = export_dir / rel_mask_file.replace(".txt", "_feature.npy")
+            rel_mask_file, score = line.strip().split(" ")
+            mask_file = export_dir / rel_mask_file.replace(".npy", ".txt")
+            feature_file = export_dir / rel_mask_file.replace(".npy", "_feature.npy")
             pred_feature = np.load(feature_file)
             pred_feature = F.normalize(
                 torch.from_numpy(pred_feature), p=2, dim=0
             ).numpy()
 
-            # compute correspondence to queries
-            cos_sims = pred_feature @ query_feats.T  # np(n_queries)
+            cos_sims = pred_feature @ query_feats.T  # np(n_queries,)
             correspondences = (cos_sims + 1) / 2
 
             predictions.append(
                 {
                     "mask": np.loadtxt(mask_file).astype(bool),  # np(n_points,)
                     "query_correspondences": correspondences,  # np(n_queries,)
-                    "class_id": int(pred_class_id),
                     "score": float(score),
                 }
             )
 
         # prepare stuff for istance visualization
         sorted_masks = np.hstack([p["mask"][:, None] for p in predictions])
-        sorted_classes = np.array([p["class_id"] for p in predictions])
-        target_full["labels"][target_full["labels"] == 0] = -1
-        target_full["labels"] = ds._remap_model_output(
-            target_full["labels"].cpu() + ds.label_offset
-        )
+        sorted_classes = np.array([3 for p in predictions])
+        # target_full["labels"][target_full["labels"] == 0] = -1
+        # target_full["labels"] = ds._remap_model_output(
+        #     target_full["labels"].cpu() + ds.label_offset
+        # )
 
+        # generate red heatmaps from correspondences
         query_heatmaps = {}
         for query in QUERIES:
             query_heatmaps[query] = {
@@ -102,16 +131,15 @@ def main(cfg):
         for pred in reversed(predictions):
             for i, query in enumerate(QUERIES):
                 mask = pred["mask"]
-                query_heatmaps[query]["colors"][mask, 0] = pred[
-                    "query_correspondences"
-                ][i]
-        topk_queries = {}
-        for query, query_viz in query_heatmaps.items():
-            # map the red colors to blue -> red heatmap
-            query_viz["colors"][:, 0] = query_viz["colors"][:, 0] * 255
+                exp_scale = lambda x: (np.exp(10 * x) - 1) / (np.exp(10) - 1)
+                query_heatmaps[query]["colors"][mask, 0] = (
+                    exp_scale(pred["query_correspondences"][i]) * 255
+                )
 
-            # additionally create top k correspondences overlays
-            if TOP_K:
+        # generate overlays with top k corresponding instances
+        if TOP_K:
+            topk_queries = {}
+            for query, query_viz in query_heatmaps.items():
                 top_k_vals, _ = torch.topk(
                     torch.from_numpy(query_viz["colors"][:, 0].flatten()).unique(),
                     k=TOP_K,
@@ -120,9 +148,7 @@ def main(cfg):
                 top_k_instance_masks = []
                 for val in top_k_vals:
                     top_k_instance_masks.append(
-                        (query_viz["colors"][:, 0] == val).astype(
-                            int
-                        )  # check the red channel
+                        (query_viz["colors"][:, 0] == val).astype(int)
                     )
                 full_mask = np.stack(top_k_instance_masks, axis=0).sum(0) > 0
                 k = f"top_{TOP_K}_{query}"
@@ -133,8 +159,49 @@ def main(cfg):
                 }
                 topk_queries[k]["colors"][:, 0] = 255.0
                 topk_queries[k]["colors"][:, 1:] = 0.0
-        query_heatmaps.update(topk_queries)
+            query_heatmaps.update(topk_queries)
 
+        # add lseg feat viz if specified
+        if FEATURE_CLOUDS_DIR_2D:
+            feats_file = Path(FEATURE_CLOUDS_DIR_2D) / file_name / "lseg_feats.npy"
+            if not feats_file.exists:
+                print("WARNING: file specified but does not exist:", feats_file)
+            else:
+                feats = np.load(feats_file)
+                pca = PCA(n_components=3)
+                reduced_feats = pca.fit_transform(feats)
+                reduced_feats = (
+                    (reduced_feats - reduced_feats.min()) / reduced_feats.max() * 255
+                )
+                query_heatmaps["2d_feats"] = {
+                    "coord_mask": np.full(
+                        shape=(orig_coords.shape[0],), fill_value=True, dtype=bool
+                    ),
+                    "colors": reduced_feats,
+                    "normals": orig_normals,
+                }
+
+        # add csc feat viz if specified
+        if FEATURE_CLOUDS_DIR_3D:
+            feats_file = Path(FEATURE_CLOUDS_DIR_3D) / file_name / "csc_feats.npy"
+            if not feats_file.exists:
+                print("WARNING: file specified but does not exist:", feats_file)
+            else:
+                feats = np.load(feats_file)
+                pca = PCA(n_components=3)
+                reduced_feats = pca.fit_transform(feats)
+                reduced_feats = (
+                    (reduced_feats - reduced_feats.min()) / reduced_feats.max() * 255
+                )
+                query_heatmaps["3d_feats"] = {
+                    "coord_mask": np.full(
+                        shape=(orig_coords.shape[0],), fill_value=True, dtype=bool
+                    ),
+                    "colors": reduced_feats,
+                    "normals": orig_normals,
+                }
+
+        # save to file
         save_visualizations(
             target_full=target_full,
             full_res_coords=orig_coords,
@@ -147,8 +214,6 @@ def main(cfg):
             save_base_dir=SAVE_DIR,
             additional_overlays=query_heatmaps,
         )
-
-        exit(0)
 
 
 if __name__ == "__main__":

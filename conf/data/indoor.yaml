@@ -9,7 +9,7 @@ feature_dim_reduction_path: null
 # splits
 train_mode: train
 validation_mode: validation
-test_mode: test # test  # validation
+test_mode: validation # test  # validation
 
 # dataset
 ignore_label: 255

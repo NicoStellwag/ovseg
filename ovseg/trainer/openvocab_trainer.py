@@ -160,7 +160,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
         if self.config.general.export:
-            self.eval_step(batch,batch_idx)
+            self.eval_step(batch, batch_idx)
             del self.preds
             del self.bbox_preds
             del self.bbox_gt
@@ -193,7 +193,6 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         )
 
         try:
-            
             output = self.forward(
                 data,
                 point2segment=[target[i]["point2segment"] for i in range(len(target))],
@@ -263,7 +262,7 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
         pred_mask_path = f"{base_path}/pred_mask"
 
         Path(pred_mask_path).mkdir(parents=True, exist_ok=True)
-        
+
         file_name = file_names
         with open(f"{base_path}/{file_name}.txt", "w") as fout:
             real_id = -1
@@ -272,23 +271,23 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 pred_class = pred_classes[instance_id]
                 score = scores[instance_id]
                 feature = pred_features[instance_id]
-                mask = pred_masks_instance[:, instance_id].astype("uint8")
-
+                mask = pred_masks[:, instance_id].astype("uint8")
+                mask_inst = pred_masks_instance[:, instance_id].astype("uint8")
 
                 if score > self.config.general.export_threshold:
                     # reduce the export size a bit. I guess no performance difference
-                    # np.savetxt(
-                    #     f"{pred_mask_path}/{file_name}_{real_id}.txt",
-                    #     mask,
-                    #     fmt="%d",
-                    # )
-                    np.save(f"{pred_mask_path}/{file_name}_{real_id}_mask.npy",mask)
+                    np.savetxt(
+                        f"{pred_mask_path}/{file_name}_{real_id}.txt",
+                        mask,
+                        fmt="%d",
+                    )
+                    np.save(
+                        f"{pred_mask_path}/{file_name}_{real_id}_mask.npy", mask_inst
+                    )
                     np.save(
                         f"{pred_mask_path}/{file_name}_{real_id}_feature.npy", feature
                     )
-                    fout.write(
-                        f"pred_mask/{file_name}_{real_id}.npy {score}\n"
-                    )
+                    fout.write(f"pred_mask/{file_name}_{real_id}.npy {score}\n")
 
     # * nothing changed
     def training_epoch_end(self, outputs):
@@ -507,15 +506,15 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
 
         raw_coordinates = None
         if self.config.data.add_raw_coordinates:
-            raw_coordinates = data.features[:, -3:]#npoint,3
+            raw_coordinates = data.features[:, -3:]  # npoint,3
             data.features = data.features[:, :-3]
 
         if raw_coordinates.shape[0] == 0:
             return 0.0
 
         data = ME.SparseTensor(
-            coordinates=data.coordinates,#npoint,4
-            features=data.features,#npoint,3
+            coordinates=data.coordinates,  # npoint,4
+            features=data.features,  # npoint,3
             device=self.device,
         )
 
@@ -523,7 +522,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             with torch.no_grad():
                 output = self.forward(
                     data,
-                    point2segment=[target[i]["point2segment"] for i in range(len(target))],#npoints
+                    point2segment=[
+                        target[i]["point2segment"] for i in range(len(target))
+                    ],  # npoints
                     raw_coordinates=raw_coordinates,
                     is_eval=True,
                 )
@@ -875,7 +876,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 )
 
             masks = masks.numpy()
-            masks_instance = prediction[self.decoder_id]["pred_masks"][bid].detach().cpu().numpy()
+            masks_instance = (
+                prediction[self.decoder_id]["pred_masks"][bid].detach().cpu().numpy()
+            )
             heatmap = heatmap.numpy()
 
             sort_scores = scores.sort(descending=True)
@@ -920,7 +923,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 keep_instances = sorted(list(keep_instances))
                 all_pred_classes.append(sort_classes[keep_instances])
                 all_pred_masks.append(sorted_masks[:, keep_instances])
-                all_pred_masks_instances.append(sorted_masks_instance[:, keep_instances])
+                all_pred_masks_instances.append(
+                    sorted_masks_instance[:, keep_instances]
+                )
                 all_pred_scores.append(sort_scores_values[keep_instances])
                 all_pred_features.append(sort_features[keep_instances])
                 all_heatmaps.append(sorted_heatmap[:, keep_instances])

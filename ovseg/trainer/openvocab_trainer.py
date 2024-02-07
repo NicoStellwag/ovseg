@@ -272,7 +272,8 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 score = scores[instance_id]
                 feature = pred_features[instance_id]
                 mask = pred_masks[:, instance_id].astype("uint8")
-                mask_inst = pred_masks_instance[:, instance_id].astype("uint8")
+                if not self.config.general.use_dbscan:
+                    mask_inst = pred_masks_instance[:, instance_id].astype("uint8")
 
                 if score > self.config.general.export_threshold:
                     # reduce the export size a bit. I guess no performance difference
@@ -281,9 +282,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         mask,
                         fmt="%d",
                     )
-                    np.save(
-                        f"{pred_mask_path}/{file_name}_{real_id}_mask.npy", mask_inst
-                    )
+                    if not self.config.general.use_dbscan:
+                        np.save(
+                            f"{pred_mask_path}/{file_name}_{real_id}_mask.npy",
+                            mask_inst,
+                        )
                     np.save(
                         f"{pred_mask_path}/{file_name}_{real_id}_feature.npy", feature
                     )
@@ -584,9 +587,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             original_normals,
             raw_coordinates,
             data_idx,
-            backbone_features=rescaled_pca
-            if self.config.general.save_visualizations
-            else None,
+            backbone_features=(
+                rescaled_pca if self.config.general.save_visualizations else None
+            ),
         )
 
         if self.config.data.test_mode != "test":
@@ -876,9 +879,13 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 )
 
             masks = masks.numpy()
-            masks_instance = (
-                prediction[self.decoder_id]["pred_masks"][bid].detach().cpu().numpy()
-            )
+            if not self.config.general.use_dbscan:
+                masks_instance = (
+                    prediction[self.decoder_id]["pred_masks"][bid]
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
             heatmap = heatmap.numpy()
 
             sort_scores = scores.sort(descending=True)
@@ -888,7 +895,8 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             sort_features = features[sort_scores_index]
 
             sorted_masks = masks[:, sort_scores_index]
-            sorted_masks_instance = masks_instance[:, sort_scores_index]
+            if not self.config.general.use_dbscan:
+                sorted_masks_instance = masks_instance[:, sort_scores_index]
             sorted_heatmap = heatmap[:, sort_scores_index]
 
             # throw away predicted instances with low scores if specified
@@ -923,16 +931,18 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                 keep_instances = sorted(list(keep_instances))
                 all_pred_classes.append(sort_classes[keep_instances])
                 all_pred_masks.append(sorted_masks[:, keep_instances])
-                all_pred_masks_instances.append(
-                    sorted_masks_instance[:, keep_instances]
-                )
+                if not self.config.general.use_dbscan:
+                    all_pred_masks_instances.append(
+                        sorted_masks_instance[:, keep_instances]
+                    )
                 all_pred_scores.append(sort_scores_values[keep_instances])
                 all_pred_features.append(sort_features[keep_instances])
                 all_heatmaps.append(sorted_heatmap[:, keep_instances])
             else:
                 all_pred_classes.append(sort_classes)
                 all_pred_masks.append(sorted_masks)
-                all_pred_masks_instances.append(sorted_masks_instance)
+                if not self.config.general.use_dbscan:
+                    all_pred_masks_instances.append(sorted_masks_instance)
                 all_pred_scores.append(sort_scores_values)
                 all_pred_features.append(sort_features)
                 all_heatmaps.append(sorted_heatmap)
@@ -950,10 +960,10 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             )
 
             if self.config.data.test_mode != "test" and len(target_full_res) != 0:
-                target_full_res[bid][
-                    "labels"
-                ] = self.validation_dataset._remap_model_output(
-                    target_full_res[bid]["labels"].cpu() + label_offset
+                target_full_res[bid]["labels"] = (
+                    self.validation_dataset._remap_model_output(
+                        target_full_res[bid]["labels"].cpu() + label_offset
+                    )
                 )
 
                 # generate bounding boxes for predictions
@@ -1016,7 +1026,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
             if self.config.general.eval_inner_core == -1:
                 self.preds[file_names[bid]] = {
                     "pred_masks": all_pred_masks[bid],
-                    "pred_masks_instance": all_pred_masks_instances[bid],
+                    "pred_masks_instance": (
+                        all_pred_masks_instances[bid]
+                        if not self.config.general.use_dbscan
+                        else None
+                    ),
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
                     "pred_features": all_pred_features[bid],
@@ -1027,7 +1041,11 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                     "pred_masks": all_pred_masks[bid][
                         self.test_dataset.data[idx[bid]]["cond_inner"]
                     ],
-                    "pred_masks_instance": all_pred_masks_instances[bid],
+                    "pred_masks_instance": (
+                        all_pred_masks_instances[bid]
+                        if not self.config.general.use_dbscan
+                        else None
+                    ),
                     "pred_scores": all_pred_scores[bid],
                     "pred_classes": all_pred_classes[bid],
                     "pred_features": all_pred_features[bid],
@@ -1059,11 +1077,13 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                                 self.test_dataset.data[idx[bid]]["cond_inner"]
                             ]
                         ],
-                        query_pos=all_query_pos[bid][
-                            self.test_dataset.data[idx[bid]]["cond_inner"]
-                        ]
-                        if len(all_query_pos) > 0
-                        else None,
+                        query_pos=(
+                            all_query_pos[bid][
+                                self.test_dataset.data[idx[bid]]["cond_inner"]
+                            ]
+                            if len(all_query_pos) > 0
+                            else None
+                        ),
                         backbone_features=backbone_features[
                             self.test_dataset.data[idx[bid]]["cond_inner"]
                         ],
@@ -1080,9 +1100,9 @@ class OpenVocabInstanceSegmentation(pl.LightningModule):
                         original_normals[bid],
                         [self.preds[file_names[bid]]["pred_scores"]],
                         sorted_heatmaps=[all_heatmaps[bid]],
-                        query_pos=all_query_pos[bid]
-                        if len(all_query_pos) > 0
-                        else None,
+                        query_pos=(
+                            all_query_pos[bid] if len(all_query_pos) > 0 else None
+                        ),
                         backbone_features=backbone_features,
                         point_size=self.config.general.visualization_point_size,
                     )

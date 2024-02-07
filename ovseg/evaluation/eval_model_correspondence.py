@@ -13,26 +13,15 @@ MODEL_EXPORT_DIR = (
     "/mnt/hdd/viz_poster/model_exports/instance_evaluation_i4_test_export"
 )
 QUERIES = [
-    "a fridge in a scene",
     "a couch in a scene",
-    "a chair in a scene",
-    "a shelf in a scene",
-    "a kitchen counter in a scene",
-    "a washing machine in a scene",
-    "a trashcan in a scene",
-    "a desk in a scene",
-    "a computer in a scene",
-    "a window in a scene",
-    "a door in a scene",
-    "a computer in a scene",
-    "a toilet in a scene",
-    "a sink in a scene",
-    "stairs in a scene",
-    "washing machines in a scene",
-    "a painting on the wall",
+    "a chair to sit on",
+    "somewhere to place my glass of water",
+    "couch",
+    "sofa",
+    "settee",
 ]
-TOP_K = 3
-SAVE_DIR = "/mnt/hdd/viz_poster/model_i4"
+TOP_K = 1
+SAVE_DIR = "/mnt/hdd/viz_poster/top_queries"
 FIRST_N_SCENES = 10
 FEATURE_CLOUDS_DIR_2D = "/mnt/hdd/ncut_features/2d/lseg"
 FEATURE_CLOUDS_DIR_3D = "/mnt/hdd/ncut_features/3d/csc"
@@ -46,7 +35,10 @@ def main(cfg):
     os.chdir(hydra.utils.get_original_cwd())
     sys.path.append(hydra.utils.get_original_cwd())
 
-    from ovseg.evaluation.trainer_visualization import save_visualizations
+    from ovseg.evaluation.trainer_visualization import (
+        save_visualizations,
+        get_evenly_distributed_colors,
+    )
 
     Path(SAVE_DIR).mkdir(parents=True, exist_ok=True)
 
@@ -59,8 +51,8 @@ def main(cfg):
     query_feats = F.normalize(query_feats, p=2, dim=-1)
     query_feats = query_feats.cpu().numpy()  # np(n_queries, dim_feature)
 
-    ds = hydra.utils.instantiate(cfg.data.test_dataset)
-    collate_fn = hydra.utils.instantiate(cfg.data.test_collation)
+    ds = hydra.utils.instantiate(cfg.data.test_dataset, mode="test")
+    collate_fn = hydra.utils.instantiate(cfg.data.test_collation, mode="test")
     loader = hydra.utils.instantiate(
         cfg.data.test_dataloader, ds, collate_fn=collate_fn
     )
@@ -139,7 +131,8 @@ def main(cfg):
         # generate overlays with top k corresponding instances
         if TOP_K:
             topk_queries = {}
-            for query, query_viz in query_heatmaps.items():
+            all_colors = np.array(get_evenly_distributed_colors(len(query_heatmaps)))
+            for i, (query, query_viz) in enumerate(query_heatmaps.items()):
                 top_k_vals, _ = torch.topk(
                     torch.from_numpy(query_viz["colors"][:, 0].flatten()).unique(),
                     k=TOP_K,
@@ -152,13 +145,15 @@ def main(cfg):
                     )
                 full_mask = np.stack(top_k_instance_masks, axis=0).sum(0) > 0
                 k = f"top_{TOP_K}_{query}"
+                num_points_top_inst = full_mask.astype(int).sum()
+                colors = np.repeat(
+                    all_colors[i][None, ...], repeats=num_points_top_inst, axis=0
+                )
                 topk_queries[k] = {
                     "coord_mask": full_mask,
-                    "colors": query_viz["colors"][full_mask],
+                    "colors": colors,
                     "normals": query_viz["normals"][full_mask],
                 }
-                topk_queries[k]["colors"][:, 0] = 255.0
-                topk_queries[k]["colors"][:, 1:] = 0.0
             query_heatmaps.update(topk_queries)
 
         # add lseg feat viz if specified

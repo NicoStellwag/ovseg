@@ -142,9 +142,9 @@ def semantic_evaluation(ap_results, preds, gt_data_path, pred_path, ds_gt, log_p
     mean_tail_results = np.nanmean(tail_results, axis=0)
     mean_common_results = np.nanmean(common_results, axis=0)
     mean_head_results = np.nanmean(head_results, axis=0)
-    ap_results[f"{log_prefix}_mean_tail_ap_25"] = mean_tail_results[0]
-    ap_results[f"{log_prefix}_mean_common_ap_25"] = mean_common_results[0]
-    ap_results[f"{log_prefix}_mean_head_ap_25"] = mean_head_results[0]
+    ap_results[f"{log_prefix}_mean_tail_ap"] = mean_tail_results[0]
+    ap_results[f"{log_prefix}_mean_common_ap"] = mean_common_results[0]
+    ap_results[f"{log_prefix}_mean_head_ap"] = mean_head_results[0]
     ap_results[f"{log_prefix}_mean_tail_ap_50"] = mean_tail_results[1]
     ap_results[f"{log_prefix}_mean_common_ap_50"] = mean_common_results[1]
     ap_results[f"{log_prefix}_mean_head_ap_50"] = mean_head_results[1]

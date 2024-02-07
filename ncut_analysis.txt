@@ -1,0 +1,436 @@
+lseg_iterative_0.50_fulldim_2d
+	 val_class_agnostic_ap:    0.0297
+	 val_class_agnostic_ap_25: 0.1069
+	 val_class_agnostic_ap_50: 0.0546
+	 val_mean_ap:              0.0057
+	 val_mean_ap_25:           0.0168
+	 val_mean_ap_50:           0.0103
+lseg_iterative_0.50_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0386
+	 val_class_agnostic_ap_25: 0.1223
+	 val_class_agnostic_ap_50: 0.0676
+	 val_mean_ap:              0.0063
+	 val_mean_ap_25:           0.0155
+	 val_mean_ap_50:           0.0091
+lseg_iterative_0.50_reduceddim_2d
+	 val_class_agnostic_ap:    0.0230
+	 val_class_agnostic_ap_25: 0.0786
+	 val_class_agnostic_ap_50: 0.0405
+	 val_mean_ap:              0.0037
+	 val_mean_ap_25:           0.0087
+	 val_mean_ap_50:           0.0058
+lseg_iterative_0.50_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0300
+	 val_class_agnostic_ap_25: 0.0979
+	 val_class_agnostic_ap_50: 0.0517
+	 val_mean_ap:              0.0047
+	 val_mean_ap_25:           0.0104
+	 val_mean_ap_50:           0.0065
+lseg_iterative_0.55_fulldim_2d
+	 val_class_agnostic_ap:    0.0335
+	 val_class_agnostic_ap_25: 0.1147
+	 val_class_agnostic_ap_50: 0.0613
+	 val_mean_ap:              0.0052
+	 val_mean_ap_25:           0.0156
+	 val_mean_ap_50:           0.0093
+lseg_iterative_0.55_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0442
+	 val_class_agnostic_ap_25: 0.1343
+	 val_class_agnostic_ap_50: 0.0763
+	 val_mean_ap:              0.0070
+	 val_mean_ap_25:           0.0195
+	 val_mean_ap_50:           0.0108
+lseg_iterative_0.55_reduceddim_2d
+	 val_class_agnostic_ap:    0.0248
+	 val_class_agnostic_ap_25: 0.0863
+	 val_class_agnostic_ap_50: 0.0438
+	 val_mean_ap:              0.0034
+	 val_mean_ap_25:           0.0097
+	 val_mean_ap_50:           0.0056
+lseg_iterative_0.55_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0331
+	 val_class_agnostic_ap_25: 0.1029
+	 val_class_agnostic_ap_50: 0.0571
+	 val_mean_ap:              0.0038
+	 val_mean_ap_25:           0.0110
+	 val_mean_ap_50:           0.0060
+lseg_iterative_0.60_fulldim_2d
+	 val_class_agnostic_ap:    0.0364
+	 val_class_agnostic_ap_25: 0.1209
+	 val_class_agnostic_ap_50: 0.0665
+	 val_mean_ap:              0.0071
+	 val_mean_ap_25:           0.0182
+	 val_mean_ap_50:           0.0115
+lseg_iterative_0.60_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0498
+	 val_class_agnostic_ap_25: 0.1442
+	 val_class_agnostic_ap_50: 0.0843
+	 val_mean_ap:              0.0067
+	 val_mean_ap_25:           0.0181
+	 val_mean_ap_50:           0.0111
+lseg_iterative_0.60_reduceddim_2d
+	 val_class_agnostic_ap:    0.0274
+	 val_class_agnostic_ap_25: 0.0976
+	 val_class_agnostic_ap_50: 0.0489
+	 val_mean_ap:              0.0046
+	 val_mean_ap_25:           0.0139
+	 val_mean_ap_50:           0.0078
+lseg_iterative_0.60_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0351
+	 val_class_agnostic_ap_25: 0.1078
+	 val_class_agnostic_ap_50: 0.0598
+	 val_mean_ap:              0.0047
+	 val_mean_ap_25:           0.0118
+	 val_mean_ap_50:           0.0069
+lseg_iterative_0.65_fulldim_2d
+	 val_class_agnostic_ap:    0.0390
+	 val_class_agnostic_ap_25: 0.1266
+	 val_class_agnostic_ap_50: 0.0696
+	 val_mean_ap:              0.0087
+	 val_mean_ap_25:           0.0217
+	 val_mean_ap_50:           0.0141
+lseg_iterative_0.65_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0531
+	 val_class_agnostic_ap_25: 0.1551
+	 val_class_agnostic_ap_50: 0.0897
+	 val_mean_ap:              0.0072
+	 val_mean_ap_25:           0.0220
+	 val_mean_ap_50:           0.0122
+lseg_iterative_0.65_reduceddim_2d
+	 val_class_agnostic_ap:    0.0299
+	 val_class_agnostic_ap_25: 0.1076
+	 val_class_agnostic_ap_50: 0.0532
+	 val_mean_ap:              0.0048
+	 val_mean_ap_25:           0.0147
+	 val_mean_ap_50:           0.0079
+lseg_iterative_0.65_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0391
+	 val_class_agnostic_ap_25: 0.1208
+	 val_class_agnostic_ap_50: 0.0650
+	 val_mean_ap:              0.0063
+	 val_mean_ap_25:           0.0171
+	 val_mean_ap_50:           0.0098
+lseg_iterative_0.70_fulldim_2d
+	 val_class_agnostic_ap:    0.0423
+	 val_class_agnostic_ap_25: 0.1312
+	 val_class_agnostic_ap_50: 0.0745
+	 val_mean_ap:              0.0085
+	 val_mean_ap_25:           0.0205
+	 val_mean_ap_50:           0.0135
+lseg_iterative_0.70_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0565
+	 val_class_agnostic_ap_25: 0.1627
+	 val_class_agnostic_ap_50: 0.0943
+	 val_mean_ap:              0.0082
+	 val_mean_ap_25:           0.0231
+	 val_mean_ap_50:           0.0128
+lseg_iterative_0.70_reduceddim_2d
+	 val_class_agnostic_ap:    0.0318
+	 val_class_agnostic_ap_25: 0.1179
+	 val_class_agnostic_ap_50: 0.0574
+	 val_mean_ap:              0.0064
+	 val_mean_ap_25:           0.0178
+	 val_mean_ap_50:           0.0109
+lseg_iterative_0.70_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0430
+	 val_class_agnostic_ap_25: 0.1277
+	 val_class_agnostic_ap_50: 0.0729
+	 val_mean_ap:              0.0068
+	 val_mean_ap_25:           0.0178
+	 val_mean_ap_50:           0.0106
+lseg_iterative_0.75_fulldim_2d
+	 val_class_agnostic_ap:    0.0468
+	 val_class_agnostic_ap_25: 0.1436
+	 val_class_agnostic_ap_50: 0.0819
+	 val_mean_ap:              0.0087
+	 val_mean_ap_25:           0.0200
+	 val_mean_ap_50:           0.0138
+lseg_iterative_0.75_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0554
+	 val_class_agnostic_ap_25: 0.1560
+	 val_class_agnostic_ap_50: 0.0930
+	 val_mean_ap:              0.0080
+	 val_mean_ap_25:           0.0222
+	 val_mean_ap_50:           0.0136
+lseg_iterative_0.75_reduceddim_2d
+	 val_class_agnostic_ap:    0.0382
+	 val_class_agnostic_ap_25: 0.1338
+	 val_class_agnostic_ap_50: 0.0703
+	 val_mean_ap:              0.0078
+	 val_mean_ap_25:           0.0205
+	 val_mean_ap_50:           0.0129
+lseg_iterative_0.75_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0464
+	 val_class_agnostic_ap_25: 0.1429
+	 val_class_agnostic_ap_50: 0.0779
+	 val_mean_ap:              0.0067
+	 val_mean_ap_25:           0.0170
+	 val_mean_ap_50:           0.0110
+lseg_iterative_0.80_fulldim_2d
+	 val_class_agnostic_ap:    0.0476
+	 val_class_agnostic_ap_25: 0.1454
+	 val_class_agnostic_ap_50: 0.0828
+	 val_mean_ap:              0.0099
+	 val_mean_ap_25:           0.0224
+	 val_mean_ap_50:           0.0152
+lseg_iterative_0.80_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0487
+	 val_class_agnostic_ap_25: 0.1394
+	 val_class_agnostic_ap_50: 0.0824
+	 val_mean_ap:              0.0076
+	 val_mean_ap_25:           0.0217
+	 val_mean_ap_50:           0.0114
+lseg_iterative_0.80_reduceddim_2d
+	 val_class_agnostic_ap:    0.0415
+	 val_class_agnostic_ap_25: 0.1447
+	 val_class_agnostic_ap_50: 0.0763
+	 val_mean_ap:              0.0095
+	 val_mean_ap_25:           0.0261
+	 val_mean_ap_50:           0.0162
+lseg_iterative_0.80_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0436
+	 val_class_agnostic_ap_25: 0.1366
+	 val_class_agnostic_ap_50: 0.0758
+	 val_mean_ap:              0.0072
+	 val_mean_ap_25:           0.0195
+	 val_mean_ap_50:           0.0119
+lseg_iterative_0.85_fulldim_2d
+	 val_class_agnostic_ap:    0.0518
+	 val_class_agnostic_ap_25: 0.1486
+	 val_class_agnostic_ap_50: 0.0883
+	 val_mean_ap:              0.0123
+	 val_mean_ap_25:           0.0269
+	 val_mean_ap_50:           0.0200
+lseg_iterative_0.85_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0419
+	 val_class_agnostic_ap_25: 0.1306
+	 val_class_agnostic_ap_50: 0.0737
+	 val_mean_ap:              0.0079
+	 val_mean_ap_25:           0.0229
+	 val_mean_ap_50:           0.0133
+lseg_iterative_0.85_reduceddim_2d
+	 val_class_agnostic_ap:    0.0494
+	 val_class_agnostic_ap_25: 0.1624
+	 val_class_agnostic_ap_50: 0.0906
+	 val_mean_ap:              0.0109
+	 val_mean_ap_25:           0.0301
+	 val_mean_ap_50:           0.0190
+lseg_iterative_0.85_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0396
+	 val_class_agnostic_ap_25: 0.1313
+	 val_class_agnostic_ap_50: 0.0703
+	 val_mean_ap:              0.0072
+	 val_mean_ap_25:           0.0200
+	 val_mean_ap_50:           0.0116
+lseg_iterative_0.90_fulldim_2d
+	 val_class_agnostic_ap:    0.0515
+	 val_class_agnostic_ap_25: 0.1505
+	 val_class_agnostic_ap_50: 0.0888
+	 val_mean_ap:              0.0115
+	 val_mean_ap_25:           0.0257
+	 val_mean_ap_50:           0.0181
+lseg_iterative_0.90_fulldim_2d3d
+	 val_class_agnostic_ap:    0.0399
+	 val_class_agnostic_ap_25: 0.1484
+	 val_class_agnostic_ap_50: 0.0767
+	 val_mean_ap:              0.0061
+	 val_mean_ap_25:           0.0264
+	 val_mean_ap_50:           0.0144
+lseg_iterative_0.90_reduceddim_2d
+	 val_class_agnostic_ap:    0.0520
+	 val_class_agnostic_ap_25: 0.1732
+	 val_class_agnostic_ap_50: 0.0928
+	 val_mean_ap:              0.0115
+	 val_mean_ap_25:           0.0306
+	 val_mean_ap_50:           0.0201
+lseg_iterative_0.90_reduceddim_2d3d
+	 val_class_agnostic_ap:    0.0413
+	 val_class_agnostic_ap_25: 0.1645
+	 val_class_agnostic_ap_50: 0.0796
+	 val_mean_ap:              0.0060
+	 val_mean_ap_25:           0.0206
+	 val_mean_ap_50:           0.0117
+lseg_sc_fulldim_2d3d_filtering
+	 val_class_agnostic_ap:    0.0227
+	 val_class_agnostic_ap_25: 0.0931
+	 val_class_agnostic_ap_50: 0.0421
+	 val_mean_ap:              0.0041
+	 val_mean_ap_25:           0.0184
+	 val_mean_ap_50:           0.0068
+lseg_sc_fulldim_2d3d_nofiltering
+	 val_class_agnostic_ap:    0.0291
+	 val_class_agnostic_ap_25: 0.1587
+	 val_class_agnostic_ap_50: 0.0565
+	 val_mean_ap:              0.0065
+	 val_mean_ap_25:           0.0260
+	 val_mean_ap_50:           0.0109
+lseg_sc_fulldim_2d_filtering
+	 val_class_agnostic_ap:    0.0227
+	 val_class_agnostic_ap_25: 0.0939
+	 val_class_agnostic_ap_50: 0.0422
+	 val_mean_ap:              0.0040
+	 val_mean_ap_25:           0.0167
+	 val_mean_ap_50:           0.0079
+lseg_sc_fulldim_2d_nofiltering
+	 val_class_agnostic_ap:    0.0325
+	 val_class_agnostic_ap_25: 0.1699
+	 val_class_agnostic_ap_50: 0.0620
+	 val_mean_ap:              0.0066
+	 val_mean_ap_25:           0.0282
+	 val_mean_ap_50:           0.0118
+lseg_sc_reduceddim_2d3d_filtering
+	 val_class_agnostic_ap:    0.0218
+	 val_class_agnostic_ap_25: 0.0920
+	 val_class_agnostic_ap_50: 0.0399
+	 val_mean_ap:              0.0045
+	 val_mean_ap_25:           0.0163
+	 val_mean_ap_50:           0.0072
+lseg_sc_reduceddim_2d3d_nofiltering
+	 val_class_agnostic_ap:    0.0303
+	 val_class_agnostic_ap_25: 0.1616
+	 val_class_agnostic_ap_50: 0.0591
+	 val_mean_ap:              0.0064
+	 val_mean_ap_25:           0.0266
+	 val_mean_ap_50:           0.0109
+lseg_sc_reduceddim_2d_filtering
+	 val_class_agnostic_ap:    0.0252
+	 val_class_agnostic_ap_25: 0.0997
+	 val_class_agnostic_ap_50: 0.0451
+	 val_mean_ap:              0.0053
+	 val_mean_ap_25:           0.0198
+	 val_mean_ap_50:           0.0096
+lseg_sc_reduceddim_2d_nofiltering
+	 val_class_agnostic_ap:    0.0353
+	 val_class_agnostic_ap_25: 0.1710
+	 val_class_agnostic_ap_50: 0.0669
+	 val_mean_ap:              0.0075
+	 val_mean_ap_25:           0.0282
+	 val_mean_ap_50:           0.0127
+
+Bests:
+val_class_agnostic_ap         lseg_iterative_0.70_fulldim_2d3d        0.0565
+val_class_agnostic_ap_25      lseg_iterative_0.90_reduceddim_2d       0.1732
+val_class_agnostic_ap_50      lseg_iterative_0.70_fulldim_2d3d        0.0943
+val_mean_ap                   lseg_iterative_0.85_fulldim_2d          0.0123
+val_mean_ap_25                lseg_iterative_0.90_reduceddim_2d       0.0306
+val_mean_ap_50                lseg_iterative_0.90_reduceddim_2d       0.0201
+
+Analysis (means over hyperparameters):
+{
+    "val_class_agnostic_ap": {
+        "method": {
+            "it": 0.04099955224924712,
+            "sc": 0.027448866464556673
+        },
+        "dim": {
+            "full": 0.04152193047714487,
+            "reduced": 0.03554965191782556
+        },
+        "3dfeats": {
+            "yes": 0.04014655304981277,
+            "no": 0.03692502934515766
+        },
+        "sc_filter": {
+            "no": 0.03179677897786612,
+            "yes": 0.02310095395124722
+        },
+        "it_tau": {
+            "0.50": 0.03030622660323612,
+            "0.55": 0.033911265976991456,
+            "0.60": 0.037169414257490936,
+            "0.65": 0.04028253892178813,
+            "0.70": 0.043400575950275716,
+            "0.75": 0.04670525551316496,
+            "0.80": 0.045371936474078695,
+            "0.85": 0.04568272563099055,
+            "0.90": 0.04616603091520752
+        }
+    },
+    "val_class_agnostic_ap_25": {
+        "method": {
+            "it": 0.1309913572649412,
+            "sc": 0.12998942974643238
+        },
+        "dim": {
+            "full": 0.1362278160215524,
+            "reduced": 0.12539056122887235
+        },
+        "3dfeats": {
+            "yes": 0.1332106956335548,
+            "no": 0.12840768161686994
+        },
+        "sc_filter": {
+            "no": 0.16531473863118867,
+            "yes": 0.09466412086167608
+        },
+        "it_tau": {
+            "0.50": 0.10141253043949648,
+            "0.55": 0.10955636864062905,
+            "0.60": 0.1176205219286155,
+            "0.65": 0.12751080213289465,
+            "0.70": 0.13485811955169613,
+            "0.75": 0.14407898225387206,
+            "0.80": 0.1415102746721573,
+            "0.85": 0.14323228864299148,
+            "0.90": 0.15914232712211868
+        }
+    },
+    "val_mean_ap": {
+        "method": {
+            "it": 0.007182837283662914,
+            "sc": 0.005605559876659029
+        },
+        "dim": {
+            "full": 0.007443369941799906,
+            "reduced": 0.006348749204797235
+        },
+        "3dfeats": {
+            "yes": 0.006357460830862116,
+            "no": 0.007434658315735026
+        },
+        "sc_filter": {
+            "no": 0.006748968756304667,
+            "yes": 0.004462150997013392
+        },
+        "it_tau": {
+            "0.50": 0.005104951670438963,
+            "0.55": 0.004871905517897208,
+            "0.60": 0.005771701185468233,
+            "0.65": 0.006730811596971434,
+            "0.70": 0.007478064147272577,
+            "0.75": 0.007805787394495493,
+            "0.80": 0.008516522162328038,
+            "0.85": 0.009577439295966612,
+            "0.90": 0.008788352582127665
+        }
+    },
+    "val_mean_ap_25": {
+        "method": {
+            "it": 0.01934570630221769,
+            "sc": 0.02252720457923656
+        },
+        "dim": {
+            "full": 0.021300269861393658,
+            "reduced": 0.018548051207412222
+        },
+        "3dfeats": {
+            "yes": 0.0192668009934504,
+            "no": 0.020581520075355478
+        },
+        "sc_filter": {
+            "no": 0.02725619185153747,
+            "yes": 0.017798217306935645
+        },
+        "it_tau": {
+            "0.50": 0.012840461060880404,
+            "0.55": 0.013971026361761063,
+            "0.60": 0.015510886473388228,
+            "0.65": 0.018859868692778368,
+            "0.70": 0.01981666668567828,
+            "0.75": 0.019926692305368143,
+            "0.80": 0.022404355502283233,
+            "0.85": 0.024968116065976875,
+            "0.90": 0.025813283571844627
+        }
+    }
+}

@@ -44,14 +44,27 @@ validation_collation_original:
   num_queries: ${model.num_queries}
 
 test_collation:
-  _target_: datasets.utils.VoxelizeCollate
+  _target_: ovseg.datasets.openvocab_utils.OpenVocabVoxelizeCollate
   ignore_label: ${data.ignore_label}
   voxel_size: ${data.voxel_size}
-  mode: ${data.test_mode}
+  mode: ${data.validation_mode}
   batch_instance: false
   probing: ${general.linear_probing_backbone}
   task: ${general.task}
   ignore_class_threshold: ${general.ignore_class_threshold}
-  filter_out_classes: ${data.test_dataset.filter_out_classes}
-  label_offset: ${data.test_dataset.label_offset}
+  filter_out_classes: ${data.validation_dataset.filter_out_classes}
+  label_offset: ${data.validation_dataset.label_offset}
   num_queries: ${model.num_queries}
+
+# test_collation:
+#   _target_: datasets.utils.VoxelizeCollate
+#   ignore_label: ${data.ignore_label}
+#   voxel_size: ${data.voxel_size}
+#   mode: ${data.test_mode}
+#   batch_instance: false
+#   probing: ${general.linear_probing_backbone}
+#   task: ${general.task}
+#   ignore_class_threshold: ${general.ignore_class_threshold}
+#   filter_out_classes: ${data.test_dataset.filter_out_classes}
+#   label_offset: ${data.test_dataset.label_offset}
+#   num_queries: ${model.num_queries}

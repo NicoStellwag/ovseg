@@ -9,15 +9,12 @@ import re
 
 BASE_PATH = "/mnt/hdd/ncut_eval"
 METRICS = [
-    "val_class_agnostic_ap",
     "val_class_agnostic_ap_25",
     "val_class_agnostic_ap_50",
-    "val_mean_ap",
+    "val_class_agnostic_ap",
     "val_mean_ap_25",
     "val_mean_ap_50",
-    # "val_mean_head_ap",
-    # "val_mean_common_ap",
-    # "val_mean_tail_ap",
+    "val_mean_ap",
 ]
 ANALYSIS_METRICS = [
     "val_class_agnostic_ap",
@@ -67,6 +64,7 @@ analysis = {
     for m in ANALYSIS_METRICS
 }
 
+latex_table_rows = []
 
 for rf in sorted(list(result_files)):
     name = rf.parent.parent.name
@@ -108,6 +106,18 @@ for rf in sorted(list(result_files)):
                 tau = re.findall(pattern, name)[0]
                 analysis[m]["it_tau"][tau].append(res[m])
 
+    # latex table
+    if "iterative" in name:
+        percents = [f"{res[m] * 100:.2f}" for m in METRICS]
+        in_math_envs = [f"\\( {p} \\)" for p in percents]
+        res_line_section = " & ".join(in_math_envs)
+        tau = "\\( " + name[15:19] + " \\)"
+        reduce_2d = "\\cmark" if "reduceddim" in name else "\\xmark"
+        take_3d = "\\cmark" if "2d3d" in name else "\\xmark"
+        latex_table_rows.append(
+            f"{tau} & {reduce_2d} & {take_3d} & {res_line_section} \\\\"
+        )
+
 
 print()
 print("Bests:")
@@ -118,3 +128,8 @@ print()
 recursive_mean(analysis)
 print("Analysis (means over hyperparameters):")
 print(json.dumps(analysis, indent=4))
+
+print()
+print("Latex table rows:")
+for r in latex_table_rows:
+    print(r)
